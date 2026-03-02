@@ -2,25 +2,39 @@
 
 English | [中文](./README.zh-CN.md)
 
-Bridge your local AI coding assistants (Claude Code / Cursor / Gemini CLI / Codex) to messaging platforms like Feishu (Lark), DingTalk, Slack, and more. Chat with your local AI agent from anywhere — no public IP required for most platforms.
+**Control your local AI coding agents from any chat app. Anywhere, anytime.**
 
-## Architecture
+cc-connect bridges AI coding assistants running on your dev machine to the messaging platforms you already use — so you can review code on the subway, kick off tasks from your phone, or pair-program from bed.
 
 ```
-┌──────────────┐     ┌────────────┐     ┌──────────────┐
-│ Feishu/Ding  │◄───►│   Engine    │◄───►│  Claude Code │
-│ Slack/...    │     │  (Router)   │     │  Cursor/...  │
-└──────────────┘     └────────────┘     └──────────────┘
-    Platform              Core               Agent
+         You (Phone / Laptop / Tablet)
+                    │
+    ┌───────────────┼───────────────┐
+    ▼               ▼               ▼
+ Feishu          Slack          Telegram  ...8 platforms
+    │               │               │
+    └───────────────┼───────────────┘
+                    ▼
+              ┌────────────┐
+              │ cc-connect │  ← your dev machine
+              └────────────┘
+              ┌─────┼─────┐
+              ▼     ▼     ▼
+         Claude  Gemini  Codex  ...4 agents
+          Code    CLI
 ```
 
-- **Platform** — Messaging platform adapter. Handles receiving/sending messages over WebSocket, Stream, etc.
-- **Agent** — AI assistant adapter. Invokes the local AI tool and collects its response.
-- **Engine** — Core router. Manages sessions, routes messages between platforms and agents, handles slash commands.
+### Why cc-connect?
 
-All components are decoupled via Go interfaces — fully pluggable and extensible.
+> Time to uninstall OpenClaw — cc-connect gives you access to the most powerful coding agents available, not just one.
 
-## Screenshot
+- **4 AI Agents** — Claude Code, Codex, Cursor Agent, Gemini CLI. Use whichever fits your workflow, or all of them at once.
+- **8 Chat Platforms** — Feishu, DingTalk, Slack, Telegram, Discord, WeChat Work, LINE, QQ. Most need zero public IP.
+- **Full Control from Chat** — Switch models (`/model`), change permission modes (`/mode`), manage sessions, all via slash commands.
+- **Agent Memory** — Read and write agent instruction files (`/memory`) without touching the terminal.
+- **Scheduled Tasks** — Set up cron jobs in natural language. "Every day at 6am, summarize GitHub trending" just works.
+- **Voice & Images** — Send voice messages or screenshots; cc-connect handles STT and multimodal forwarding.
+- **Multi-Project** — One process, multiple projects, each with its own agent + platform combo.
 
 <p align="center">
   <img src="docs/images/screenshot/cc-connect-discord.png" alt="Discord" width="600" />

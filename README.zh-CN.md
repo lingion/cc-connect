@@ -2,25 +2,39 @@
 
 [English](./README.md) | 中文
 
-将本地 AI 编程助手（Claude Code / Cursor / Gemini CLI / Codex）连接到飞书、钉钉、Slack 等即时通讯平台，实现双向对话。大部分平台无需公网 IP。
+**在任何聊天工具里，远程操控你的本地 AI 编程助手。**
 
-## 架构
+cc-connect 把运行在你开发机上的 AI 编程助手桥接到你日常使用的即时通讯工具 — 地铁上 review 代码、手机上启动任务、躺在床上 pair programming，都不是问题。
 
 ```
-┌──────────────┐     ┌────────────┐     ┌──────────────┐
-│   飞书/钉钉   │◄───►│   Engine    │◄───►│  Claude Code │
-│   Slack/...  │     │  (路由中心)  │     │  Cursor/...  │
-└──────────────┘     └────────────┘     └──────────────┘
-    Platform              Core               Agent
+         你（手机 / 电脑 / 平板）
+                    │
+    ┌───────────────┼───────────────┐
+    ▼               ▼               ▼
+   飞书           Slack         Telegram  ...8 个平台
+    │               │               │
+    └───────────────┼───────────────┘
+                    ▼
+              ┌────────────┐
+              │ cc-connect │  ← 你的开发机
+              └────────────┘
+              ┌─────┼─────┐
+              ▼     ▼     ▼
+         Claude  Gemini  Codex  ...4 个 Agent
+          Code    CLI
 ```
 
-- **Platform**：消息平台适配器，负责接收/发送消息（WebSocket / Stream / Webhook）
-- **Agent**：AI 助手适配器，负责调用 AI 工具并获取响应
-- **Engine**：核心路由引擎，管理会话、路由消息、处理斜杠命令
+### 核心亮点
 
-所有组件通过接口解耦，支持即插即用扩展。
+> 是时候卸载 OpenClaw 了 — cc-connect 让你同时拥有最强的那几个 AI 编程助手，而不只是一个。
 
-## 效果截图
+- **4 大 AI Agent** — Claude Code、Codex、Cursor Agent、Gemini CLI，按需选用，也可以同时使用
+- **8 大聊天平台** — 飞书、钉钉、Slack、Telegram、Discord、企业微信、LINE、QQ，大部分无需公网 IP
+- **聊天即控制** — 切换模型 `/model`、切换权限 `/mode`、管理会话，全部通过斜杠命令完成
+- **Agent 记忆** — 在聊天中直接读写 Agent 指令文件 `/memory`，无需回到终端
+- **定时任务** — 自然语言创建 cron 任务，"每天早上6点帮我总结 GitHub trending" 即刻生效
+- **语音 & 图片** — 发语音或截图，cc-connect 自动转文字和多模态转发
+- **多项目管理** — 一个进程同时管理多个项目，各自独立的 Agent + 平台组合
 
 <p align="center">
   <img src="docs/images/screenshot/cc-connect-lark.JPG" alt="飞书" width="32%" />
