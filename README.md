@@ -383,6 +383,81 @@ brew install ffmpeg
 apk add ffmpeg
 ```
 
+## Scheduled Tasks (Cron) `Beta`
+
+Create scheduled tasks that run automatically — like daily code reviews, periodic trend summaries, or weekly reports. When a cron job fires, cc-connect sends the prompt to the agent in your chat session and delivers the result back to you.
+
+### Manage via Slash Commands
+
+```
+/cron                                          List all cron jobs
+/cron add <min> <hour> <day> <mon> <wk> <prompt>   Create a cron job
+/cron del <id>                                 Delete a cron job
+/cron enable <id>                              Enable a job
+/cron disable <id>                             Disable a job
+```
+
+Example:
+
+```
+/cron add 0 6 * * * Collect GitHub trending repos and send me a summary
+```
+
+### Manage via CLI
+
+```bash
+cc-connect cron add --cron "0 6 * * *" --prompt "Summarize GitHub trending" --desc "Daily Trending"
+cc-connect cron list
+cc-connect cron del <job-id>
+```
+
+### Natural Language Scheduling (via Agent)
+
+**Claude Code** supports this out of the box — just tell it in natural language:
+
+> "每天早上6点帮我总结 GitHub trending"
+> "Every Monday at 9am, generate a weekly status report"
+
+Claude Code will automatically translate your request into a `cc-connect cron add` command via `--append-system-prompt`.
+
+**For other agents** (Codex, Cursor, Gemini CLI), you need to add instructions to the agent's project-level instruction file so it knows how to create cron jobs. Add the following content to the corresponding file in your project root:
+
+| Agent | Instruction File |
+|-------|-----------------|
+| Codex | `AGENTS.md` |
+| Cursor | `.cursorrules` |
+| Gemini CLI | `GEMINI.md` |
+
+**Content to add:**
+
+```markdown
+# cc-connect Integration
+
+This project is managed via cc-connect, a bridge to messaging platforms.
+
+## Scheduled tasks (cron)
+When the user asks you to do something on a schedule (e.g. "every day at 6am",
+"every Monday morning"), use the Bash/shell tool to run:
+
+  cc-connect cron add --cron "<min> <hour> <day> <month> <weekday>" --prompt "<task description>" --desc "<short label>"
+
+Environment variables CC_PROJECT and CC_SESSION_KEY are already set — do NOT
+specify --project or --session-key.
+
+Examples:
+  cc-connect cron add --cron "0 6 * * *" --prompt "Collect GitHub trending repos and send a summary" --desc "Daily GitHub Trending"
+  cc-connect cron add --cron "0 9 * * 1" --prompt "Generate a weekly project status report" --desc "Weekly Report"
+
+To list or delete cron jobs:
+  cc-connect cron list
+  cc-connect cron del <job-id>
+
+## Send message to current chat
+To proactively send a message back to the user's chat session:
+
+  cc-connect send --message "your message here"
+```
+
 ## Session Management
 
 Each user gets an independent session with full conversation context. Manage sessions via slash commands:

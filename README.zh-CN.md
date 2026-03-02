@@ -386,6 +386,81 @@ brew install ffmpeg
 apk add ffmpeg
 ```
 
+## 定时任务 (Cron) `Beta`
+
+创建定时任务，自动执行 — 比如每日代码审查、定期趋势汇总、每周报告等。定时任务触发时，cc-connect 将 prompt 发送给 Agent，并将结果回传到你的聊天会话中。
+
+### 通过斜杠命令管理
+
+```
+/cron                                          列出所有定时任务
+/cron add <分> <时> <日> <月> <周> <任务描述>      创建定时任务
+/cron del <id>                                 删除定时任务
+/cron enable <id>                              启用任务
+/cron disable <id>                             禁用任务
+```
+
+示例：
+
+```
+/cron add 0 6 * * * 帮我收集 GitHub trending 并发送总结
+```
+
+### 通过 CLI 管理
+
+```bash
+cc-connect cron add --cron "0 6 * * *" --prompt "总结 GitHub trending" --desc "每日趋势"
+cc-connect cron list
+cc-connect cron del <job-id>
+```
+
+### 自然语言创建定时任务（通过 Agent）
+
+**Claude Code** 开箱即用 — 直接用自然语言告诉它：
+
+> "每天早上6点帮我总结 GitHub trending"
+> "每周一早上9点，生成周报"
+
+Claude Code 会通过 `--append-system-prompt` 自动将你的请求转为 `cc-connect cron add` 命令。
+
+**其他 Agent**（Codex、Cursor、Gemini CLI）需要在项目根目录的 Agent 指令文件中添加说明，让 Agent 知道如何创建定时任务。将以下内容添加到对应文件中：
+
+| Agent | 指令文件 |
+|-------|---------|
+| Codex | `AGENTS.md` |
+| Cursor | `.cursorrules` |
+| Gemini CLI | `GEMINI.md` |
+
+**需要添加的内容：**
+
+```markdown
+# cc-connect Integration
+
+This project is managed via cc-connect, a bridge to messaging platforms.
+
+## Scheduled tasks (cron)
+When the user asks you to do something on a schedule (e.g. "every day at 6am",
+"每天早上6点"), use the Bash/shell tool to run:
+
+  cc-connect cron add --cron "<min> <hour> <day> <month> <weekday>" --prompt "<task description>" --desc "<short label>"
+
+Environment variables CC_PROJECT and CC_SESSION_KEY are already set — do NOT
+specify --project or --session-key.
+
+Examples:
+  cc-connect cron add --cron "0 6 * * *" --prompt "Collect GitHub trending repos and send a summary" --desc "Daily GitHub Trending"
+  cc-connect cron add --cron "0 9 * * 1" --prompt "Generate a weekly project status report" --desc "Weekly Report"
+
+To list or delete cron jobs:
+  cc-connect cron list
+  cc-connect cron del <job-id>
+
+## Send message to current chat
+To proactively send a message back to the user's chat session:
+
+  cc-connect send --message "your message here"
+```
+
 ## 会话管理
 
 每个用户拥有独立的会话和完整的对话上下文。通过斜杠命令管理会话：

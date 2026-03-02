@@ -399,6 +399,54 @@ During a session, Claude may ask for tool permissions. Reply:
 - `deny` or `拒绝` — reject this request
 - `allow all` or `允许所有` — auto-approve all remaining requests this session
 
+## Step 7: Enable Natural Language Scheduling (Non-Claude-Code Agents)
+
+cc-connect supports scheduled tasks (cron jobs). You can always create them via slash commands (`/cron add ...`) or CLI (`cc-connect cron add ...`), but to let the agent **understand natural language** like "every day at 6am, summarize trending repos", the agent needs to know about cc-connect's cron CLI.
+
+**Claude Code** handles this automatically via `--append-system-prompt` — no extra setup needed.
+
+**For Codex, Cursor Agent, or Gemini CLI**, add the following instructions to the agent's project-level instruction file in your project's `work_dir`:
+
+| Agent | File to create/edit |
+|-------|-------------------|
+| Codex | `AGENTS.md` |
+| Cursor Agent | `.cursorrules` |
+| Gemini CLI | `GEMINI.md` |
+
+**Content to add** (copy-paste into the file):
+
+```markdown
+# cc-connect Integration
+
+This project is managed via cc-connect, a bridge to messaging platforms.
+
+## Scheduled tasks (cron)
+When the user asks you to do something on a schedule (e.g. "every day at 6am",
+"every Monday morning"), use the Bash/shell tool to run:
+
+  cc-connect cron add --cron "<min> <hour> <day> <month> <weekday>" --prompt "<task description>" --desc "<short label>"
+
+Environment variables CC_PROJECT and CC_SESSION_KEY are already set — do NOT
+specify --project or --session-key.
+
+Examples:
+  cc-connect cron add --cron "0 6 * * *" --prompt "Collect GitHub trending repos and send a summary" --desc "Daily GitHub Trending"
+  cc-connect cron add --cron "0 9 * * 1" --prompt "Generate a weekly project status report" --desc "Weekly Report"
+
+To list or delete cron jobs:
+  cc-connect cron list
+  cc-connect cron del <job-id>
+
+## Send message to current chat
+To proactively send a message back to the user's chat session:
+
+  cc-connect send --message "your message here"
+```
+
+After adding this file, the agent will be able to translate natural language scheduling requests into `cc-connect cron add` commands automatically.
+
+> **Tip:** You may want to add `AGENTS.md` / `.cursorrules` / `GEMINI.md` to your `.gitignore` if you don't want cc-connect instructions committed to version control.
+
 ## Multi-Project Setup
 
 A single cc-connect process can manage multiple projects. Each project has its own agent, work directory, and platforms:
