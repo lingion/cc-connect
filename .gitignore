@@ -9,3 +9,4 @@ config.toml
 .DS_Store
 dist
 test
+RELEASE.md
