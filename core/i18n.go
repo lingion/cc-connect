@@ -151,6 +151,8 @@ const (
 	MsgCronEnabled      MsgKey = "cron_enabled"
 	MsgCronDisabled     MsgKey = "cron_disabled"
 
+	MsgStatusTitle MsgKey = "status_title"
+
 	MsgMemoryNotSupported MsgKey = "memory_not_supported"
 	MsgMemoryShowProject  MsgKey = "memory_show_project"
 	MsgMemoryShowGlobal   MsgKey = "memory_show_global"
@@ -280,6 +282,7 @@ var messages = map[MsgKey]map[Language]string{
 			"/quiet\n  Toggle thinking/tool progress\n\n" +
 			"/stop\n  Stop current execution\n\n" +
 			"/cron [add|list|del|enable|disable]\n  Manage scheduled tasks\n\n" +
+			"/status\n  Show system status\n\n" +
 			"/version\n  Show cc-connect version\n\n" +
 			"/help\n  Show this help\n\n" +
 			"Permission modes: default / edit / plan / yolo",
@@ -297,6 +300,7 @@ var messages = map[MsgKey]map[Language]string{
 			"/quiet\n  开关思考和工具进度消息\n\n" +
 			"/stop\n  停止当前执行\n\n" +
 			"/cron [add|list|del|enable|disable]\n  管理定时任务\n\n" +
+			"/status\n  查看系统状态\n\n" +
 			"/version\n  查看 cc-connect 版本\n\n" +
 			"/help\n  显示此帮助\n\n" +
 			"权限模式：default / edit / plan / yolo",
@@ -454,6 +458,26 @@ var messages = map[MsgKey]map[Language]string{
 	MsgCronDisabled: {
 		LangEnglish: "⏸ Cron job `%s` disabled.",
 		LangChinese: "⏸ 定时任务 `%s` 已暂停。",
+	},
+	MsgStatusTitle: {
+		LangEnglish: "cc-connect Status\n\n" +
+			"Project: %s\n" +
+			"Agent: %s\n" +
+			"Platforms: %s\n" +
+			"Uptime: %s\n" +
+			"Language: %s\n" +
+			"%s" +
+			"%s" +
+			"%s",
+		LangChinese: "cc-connect 状态\n\n" +
+			"项目: %s\n" +
+			"Agent: %s\n" +
+			"平台: %s\n" +
+			"运行时间: %s\n" +
+			"语言: %s\n" +
+			"%s" +
+			"%s" +
+			"%s",
 	},
 	MsgMemoryNotSupported: {
 		LangEnglish: "This agent does not support memory files.",

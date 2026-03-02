@@ -42,6 +42,7 @@ type Engine struct {
 	i18n      *I18n
 	speech    SpeechCfg
 	display   DisplayCfg
+	startedAt time.Time
 
 	providerSaveFunc       func(providerName string) error
 	providerAddSaveFunc    func(p ProviderConfig) error
@@ -86,6 +87,7 @@ func NewEngine(name string, ag Agent, platforms []Platform, sessionStorePath str
 		i18n:              NewI18n(lang),
 		display:           DisplayCfg{ThinkingMaxLen: defaultThinkingMaxLen, ToolMaxLen: defaultToolMaxLen},
 		interactiveStates: make(map[string]*interactiveState),
+		startedAt:         time.Now(),
 	}
 }
 
@@ -651,6 +653,8 @@ func (e *Engine) handleCommand(p Platform, msg *Message, raw string) {
 		e.cmdSwitch(p, msg, args)
 	case "/current":
 		e.cmdCurrent(p, msg)
+	case "/status":
+		e.cmdStatus(p, msg)
 	case "/history":
 		e.cmdHistory(p, msg, args)
 	case "/allow":
@@ -785,6 +789,118 @@ func (e *Engine) cmdCurrent(p Platform, msg *Message) {
 	e.reply(p, msg.ReplyCtx, fmt.Sprintf(
 		"📌 Current session\nName: %s\nClaude Session: %s\nLocal messages: %d",
 		s.Name, agentID, len(s.History)))
+}
+
+func (e *Engine) cmdStatus(p Platform, msg *Message) {
+	isZh := e.i18n.CurrentLang() == LangChinese
+
+	// Platforms
+	platNames := make([]string, len(e.platforms))
+	for i, pl := range e.platforms {
+		platNames[i] = pl.Name()
+	}
+	platformStr := strings.Join(platNames, ", ")
+	if len(platNames) == 0 {
+		platformStr = "-"
+	}
+
+	// Uptime
+	uptime := time.Since(e.startedAt)
+	var uptimeStr string
+	if isZh {
+		uptimeStr = formatDurationZh(uptime)
+	} else {
+		uptimeStr = formatDuration(uptime)
+	}
+
+	// Language
+	langStr := string(e.i18n.CurrentLang())
+	switch e.i18n.CurrentLang() {
+	case LangChinese:
+		langStr = "zh (中文)"
+	case LangEnglish:
+		langStr = "en (English)"
+	}
+
+	// Mode (optional)
+	var modeStr string
+	if ms, ok := e.agent.(ModeSwitcher); ok {
+		mode := ms.GetMode()
+		if mode != "" {
+			if isZh {
+				modeStr = fmt.Sprintf("权限模式: %s\n", mode)
+			} else {
+				modeStr = fmt.Sprintf("Mode: %s\n", mode)
+			}
+		}
+	}
+
+	// Session info
+	var sessionStr string
+	s := e.sessions.GetOrCreateActive(msg.SessionKey)
+	if isZh {
+		sessionStr = fmt.Sprintf("当前会话: %s (消息: %d)\n", s.Name, len(s.History))
+	} else {
+		sessionStr = fmt.Sprintf("Session: %s (messages: %d)\n", s.Name, len(s.History))
+	}
+
+	// Cron jobs
+	var cronStr string
+	if e.cronScheduler != nil {
+		jobs := e.cronScheduler.Store().ListBySessionKey(msg.SessionKey)
+		if len(jobs) > 0 {
+			enabledCount := 0
+			for _, j := range jobs {
+				if j.Enabled {
+					enabledCount++
+				}
+			}
+			if isZh {
+				cronStr = fmt.Sprintf("定时任务: %d (启用: %d)\n", len(jobs), enabledCount)
+			} else {
+				cronStr = fmt.Sprintf("Cron jobs: %d (enabled: %d)\n", len(jobs), enabledCount)
+			}
+		}
+	}
+
+	e.reply(p, msg.ReplyCtx, e.i18n.Tf(MsgStatusTitle,
+		e.name,
+		e.agent.Name(),
+		platformStr,
+		uptimeStr,
+		langStr,
+		modeStr,
+		sessionStr,
+		cronStr,
+	))
+}
+
+func formatDuration(d time.Duration) string {
+	d = d.Round(time.Second)
+	days := int(d.Hours()) / 24
+	hours := int(d.Hours()) % 24
+	minutes := int(d.Minutes()) % 60
+	if days > 0 {
+		return fmt.Sprintf("%dd %dh %dm", days, hours, minutes)
+	}
+	if hours > 0 {
+		return fmt.Sprintf("%dh %dm", hours, minutes)
+	}
+	return fmt.Sprintf("%dm", minutes)
+}
+
+func formatDurationZh(d time.Duration) string {
+	d = d.Round(time.Second)
+	days := int(d.Hours()) / 24
+	hours := int(d.Hours()) % 24
+	minutes := int(d.Minutes()) % 60
+	if days > 0 {
+		return fmt.Sprintf("%d天 %d小时 %d分钟", days, hours, minutes)
+	}
+	if hours > 0 {
+		return fmt.Sprintf("%d小时 %d分钟", hours, minutes)
+	}
+	return fmt.Sprintf("%d分钟", minutes)
 }
 
 func (e *Engine) cmdHistory(p Platform, msg *Message, args []string) {
