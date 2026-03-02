@@ -633,7 +633,7 @@ cc-connect/
 
 ## 微信用户群
 
-![用户群](https://quick.go-admin.cn/ai/article/cc-connect_wechat_group.JPG)
+<img src="https://quick.go-admin.cn/ai/article/cc-connect_wechat_group.JPG" alt="用户群" width="100px" />
 
 ## License
 
