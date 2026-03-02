@@ -62,6 +62,10 @@ func newClaudeSession(ctx context.Context, workDir, model, sessionID, mode strin
 		args = append(args, "--allowedTools", strings.Join(allowedTools, ","))
 	}
 
+	if sysPrompt := core.AgentSystemPrompt(); sysPrompt != "" {
+		args = append(args, "--append-system-prompt", sysPrompt)
+	}
+
 	slog.Debug("claudeSession: starting", "args", args, "dir", workDir, "mode", mode)
 
 	cmd := exec.CommandContext(sessionCtx, "claude", args...)

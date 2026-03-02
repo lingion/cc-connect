@@ -5,6 +5,8 @@ import (
 	"encoding/json"
 	"fmt"
 	"log/slog"
+	"os"
+	"path/filepath"
 	"strconv"
 	"strings"
 	"sync"
@@ -451,10 +453,19 @@ func (e *Engine) getOrCreateInteractiveState(sessionKey string, p Platform, repl
 
 	// Inject per-session env vars so the agent subprocess can call `cc-connect cron add` etc.
 	if inj, ok := e.agent.(SessionEnvInjector); ok {
-		inj.SetSessionEnv([]string{
+		envVars := []string{
 			"CC_PROJECT=" + e.name,
 			"CC_SESSION_KEY=" + sessionKey,
-		})
+		}
+		if exePath, err := os.Executable(); err == nil {
+			binDir := filepath.Dir(exePath)
+			if curPath := os.Getenv("PATH"); curPath != "" {
+				envVars = append(envVars, "PATH="+binDir+string(filepath.ListSeparator)+curPath)
+			} else {
+				envVars = append(envVars, "PATH="+binDir)
+			}
+		}
+		inj.SetSessionEnv(envVars)
 	}
 
 	agentSession, err := e.agent.StartSession(e.ctx, session.AgentSessionID)

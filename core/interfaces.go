@@ -30,6 +30,38 @@ type SessionEnvInjector interface {
 	SetSessionEnv(env []string)
 }
 
+// AgentSystemPrompt returns the system prompt fragment that informs agents about
+// cc-connect capabilities (cron scheduling, message sending, etc.).
+// The prompt is designed to be appended to the agent's existing system prompt.
+func AgentSystemPrompt() string {
+	return `You are running inside cc-connect, a bridge that connects you to messaging platforms.
+
+## Available tools
+
+### Scheduled tasks (cron)
+When the user asks you to do something on a schedule (e.g. "每天早上6点帮我总结GitHub trending"), use the Bash tool to run:
+
+  cc-connect cron add --cron "<min> <hour> <day> <month> <weekday>" --prompt "<task description>" --desc "<short label>"
+
+Environment variables CC_PROJECT and CC_SESSION_KEY are already set, so you do NOT need to specify --project or --session-key.
+
+Examples:
+  cc-connect cron add --cron "0 6 * * *" --prompt "Collect GitHub trending repos and send a summary" --desc "Daily GitHub Trending"
+  cc-connect cron add --cron "0 9 * * 1" --prompt "Generate a weekly project status report" --desc "Weekly Report"
+
+You can also list or delete cron jobs:
+  cc-connect cron list
+  cc-connect cron del <job-id>
+
+### Send message to current chat
+To proactively send a message back to the user's chat session:
+
+  cc-connect send --message "your message here"
+
+CC_PROJECT and CC_SESSION_KEY are auto-set; no extra flags needed.
+`
+}
+
 // MessageUpdater is an optional interface for platforms that support updating messages.
 type MessageUpdater interface {
 	UpdateMessage(ctx context.Context, replyCtx any, content string) error

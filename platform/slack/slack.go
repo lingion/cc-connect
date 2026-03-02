@@ -25,23 +25,26 @@ type replyContext struct {
 }
 
 type Platform struct {
-	botToken string
-	appToken string
-	client   *slack.Client
-	socket   *socketmode.Client
-	handler  core.MessageHandler
-	cancel   context.CancelFunc
+	botToken  string
+	appToken  string
+	allowFrom string
+	client    *slack.Client
+	socket    *socketmode.Client
+	handler   core.MessageHandler
+	cancel    context.CancelFunc
 }
 
 func New(opts map[string]any) (core.Platform, error) {
 	botToken, _ := opts["bot_token"].(string)
 	appToken, _ := opts["app_token"].(string)
+	allowFrom, _ := opts["allow_from"].(string)
 	if botToken == "" || appToken == "" {
 		return nil, fmt.Errorf("slack: bot_token and app_token are required")
 	}
 	return &Platform{
-		botToken: botToken,
-		appToken: appToken,
+		botToken:  botToken,
+		appToken:  appToken,
+		allowFrom: allowFrom,
 	}, nil
 }
 
@@ -96,6 +99,11 @@ func (p *Platform) handleEvent(evt socketmode.Event) {
 				}
 
 				slog.Debug("slack: message received", "user", ev.User, "channel", ev.Channel)
+
+				if !core.AllowList(p.allowFrom, ev.User) {
+					slog.Debug("slack: message from unauthorized user", "user", ev.User)
+					return
+				}
 
 				sessionKey := fmt.Sprintf("slack:%s:%s", ev.Channel, ev.User)
 				ts := ev.TimeStamp

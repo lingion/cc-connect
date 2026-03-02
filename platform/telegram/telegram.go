@@ -24,10 +24,11 @@ type replyContext struct {
 }
 
 type Platform struct {
-	token   string
-	bot     *tgbotapi.BotAPI
-	handler core.MessageHandler
-	cancel  context.CancelFunc
+	token     string
+	allowFrom string
+	bot       *tgbotapi.BotAPI
+	handler   core.MessageHandler
+	cancel    context.CancelFunc
 }
 
 func New(opts map[string]any) (core.Platform, error) {
@@ -35,7 +36,8 @@ func New(opts map[string]any) (core.Platform, error) {
 	if token == "" {
 		return nil, fmt.Errorf("telegram: token is required")
 	}
-	return &Platform{token: token}, nil
+	allowFrom, _ := opts["allow_from"].(string)
+	return &Platform{token: token, allowFrom: allowFrom}, nil
 }
 
 func (p *Platform) Name() string { return "telegram" }
@@ -74,6 +76,11 @@ func (p *Platform) Start(handler core.MessageHandler) error {
 					userName = strings.TrimSpace(msg.From.FirstName + " " + msg.From.LastName)
 				}
 				sessionKey := fmt.Sprintf("telegram:%d:%d", msg.Chat.ID, msg.From.ID)
+				userID := strconv.FormatInt(msg.From.ID, 10)
+				if !core.AllowList(p.allowFrom, userID) {
+					slog.Debug("telegram: message from unauthorized user", "user", userID)
+					continue
+				}
 				rctx := replyContext{chatID: msg.Chat.ID, messageID: msg.MessageID}
 
 				// Handle photo messages
@@ -86,7 +93,7 @@ func (p *Platform) Start(handler core.MessageHandler) error {
 					}
 					coreMsg := &core.Message{
 						SessionKey: sessionKey, Platform: "telegram",
-						UserID: strconv.FormatInt(msg.From.ID, 10), UserName: userName,
+						UserID: userID, UserName: userName,
 						Content:  msg.Caption,
 						Images:   []core.ImageAttachment{{MimeType: "image/jpeg", Data: imgData}},
 						ReplyCtx: rctx,
@@ -105,7 +112,7 @@ func (p *Platform) Start(handler core.MessageHandler) error {
 					}
 					coreMsg := &core.Message{
 						SessionKey: sessionKey, Platform: "telegram",
-						UserID: strconv.FormatInt(msg.From.ID, 10), UserName: userName,
+						UserID: userID, UserName: userName,
 						Audio: &core.AudioAttachment{
 							MimeType: msg.Voice.MimeType,
 							Data:     audioData,
@@ -135,7 +142,7 @@ func (p *Platform) Start(handler core.MessageHandler) error {
 					}
 					coreMsg := &core.Message{
 						SessionKey: sessionKey, Platform: "telegram",
-						UserID: strconv.FormatInt(msg.From.ID, 10), UserName: userName,
+						UserID: userID, UserName: userName,
 						Audio: &core.AudioAttachment{
 							MimeType: msg.Audio.MimeType,
 							Data:     audioData,
@@ -159,7 +166,7 @@ func (p *Platform) Start(handler core.MessageHandler) error {
 
 				coreMsg := &core.Message{
 					SessionKey: sessionKey, Platform: "telegram",
-					UserID: strconv.FormatInt(msg.From.ID, 10), UserName: userName,
+					UserID: userID, UserName: userName,
 					Content: text, ReplyCtx: rctx,
 				}
 

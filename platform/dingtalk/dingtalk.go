@@ -25,6 +25,7 @@ type replyContext struct {
 type Platform struct {
 	clientID     string
 	clientSecret string
+	allowFrom    string
 	streamClient *dingtalkClient.StreamClient
 	handler      core.MessageHandler
 }
@@ -32,12 +33,14 @@ type Platform struct {
 func New(opts map[string]any) (core.Platform, error) {
 	clientID, _ := opts["client_id"].(string)
 	clientSecret, _ := opts["client_secret"].(string)
+	allowFrom, _ := opts["allow_from"].(string)
 	if clientID == "" || clientSecret == "" {
 		return nil, fmt.Errorf("dingtalk: client_id and client_secret are required")
 	}
 	return &Platform{
 		clientID:     clientID,
 		clientSecret: clientSecret,
+		allowFrom:    allowFrom,
 	}, nil
 }
 
@@ -65,6 +68,11 @@ func (p *Platform) Start(handler core.MessageHandler) error {
 
 func (p *Platform) onMessage(data *chatbot.BotCallbackDataModel) {
 	slog.Debug("dingtalk: message received", "user", data.SenderNick, "content_len", len(data.Text.Content))
+
+	if !core.AllowList(p.allowFrom, data.SenderStaffId) {
+		slog.Debug("dingtalk: message from unauthorized user", "user", data.SenderStaffId)
+		return
+	}
 
 	sessionKey := fmt.Sprintf("dingtalk:%s:%s", data.ConversationId, data.SenderStaffId)
 

@@ -63,6 +63,7 @@ type Platform struct {
 	corpID         string
 	corpSecret     string
 	agentID        string
+	allowFrom      string
 	token          string // callback verification token
 	aesKey         []byte // decoded EncodingAESKey (32 bytes)
 	port           string
@@ -149,11 +150,13 @@ func New(opts map[string]any) (core.Platform, error) {
 	apiClient := &http.Client{Timeout: 30 * time.Second, Transport: transport}
 
 	enableMarkdown, _ := opts["enable_markdown"].(bool)
+	allowFrom, _ := opts["allow_from"].(string)
 
 	return &Platform{
 		corpID:         corpID,
 		corpSecret:     corpSecret,
 		agentID:        agentID,
+		allowFrom:      allowFrom,
 		token:          callbackToken,
 		aesKey:         aesKey,
 		port:           port,
@@ -265,6 +268,11 @@ func (p *Platform) handleMessage(w http.ResponseWriter, r *http.Request, msgSig,
 
 	if p.dedup.isDuplicate(msg.MsgId) {
 		slog.Debug("wecom: skipping duplicate message", "msg_id", msg.MsgId)
+		return
+	}
+
+	if !core.AllowList(p.allowFrom, msg.FromUserName) {
+		slog.Debug("wecom: message from unauthorized user", "user", msg.FromUserName)
 		return
 	}
 

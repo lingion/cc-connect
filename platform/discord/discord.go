@@ -25,10 +25,11 @@ type replyContext struct {
 }
 
 type Platform struct {
-	token   string
-	session *discordgo.Session
-	handler core.MessageHandler
-	botID   string
+	token     string
+	allowFrom string
+	session   *discordgo.Session
+	handler   core.MessageHandler
+	botID     string
 }
 
 func New(opts map[string]any) (core.Platform, error) {
@@ -36,7 +37,8 @@ func New(opts map[string]any) (core.Platform, error) {
 	if token == "" {
 		return nil, fmt.Errorf("discord: token is required")
 	}
-	return &Platform{token: token}, nil
+	allowFrom, _ := opts["allow_from"].(string)
+	return &Platform{token: token, allowFrom: allowFrom}, nil
 }
 
 func (p *Platform) Name() string { return "discord" }
@@ -59,6 +61,10 @@ func (p *Platform) Start(handler core.MessageHandler) error {
 
 	session.AddHandler(func(s *discordgo.Session, m *discordgo.MessageCreate) {
 		if m.Author.Bot || m.Author.ID == p.botID {
+			return
+		}
+		if !core.AllowList(p.allowFrom, m.Author.ID) {
+			slog.Debug("discord: message from unauthorized user", "user", m.Author.ID)
 			return
 		}
 

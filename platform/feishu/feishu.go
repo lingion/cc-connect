@@ -30,6 +30,7 @@ type Platform struct {
 	appID         string
 	appSecret     string
 	reactionEmoji string
+	allowFrom     string
 	client        *lark.Client
 	wsClient      *larkws.Client
 	handler       core.MessageHandler
@@ -49,11 +50,13 @@ func New(opts map[string]any) (core.Platform, error) {
 	if v, ok := opts["reaction_emoji"].(string); ok && v == "none" {
 		reactionEmoji = ""
 	}
+	allowFrom, _ := opts["allow_from"].(string)
 
 	return &Platform{
 		appID:         appID,
 		appSecret:     appSecret,
 		reactionEmoji: reactionEmoji,
+		allowFrom:     allowFrom,
 		client:        lark.NewClient(appID, appSecret),
 	}, nil
 }
@@ -78,6 +81,9 @@ func (p *Platform) Start(handler core.MessageHandler) error {
 		OnP1P2PChatCreatedV1(func(ctx context.Context, event *larkim.P1P2PChatCreatedV1) error {
 			slog.Debug("feishu: p2p chat created", "app_id", p.appID)
 			return nil
+		}).
+		OnP2MessageReactionCreatedV1(func(ctx context.Context, event *larkim.P2MessageReactionCreatedV1) error {
+			return nil // ignore reaction events (triggered by our own addReaction)
 		})
 
 	p.wsClient = larkws.NewClient(p.appID, p.appSecret,
@@ -145,6 +151,11 @@ func (p *Platform) onMessage(event *larkim.P2MessageReceiveV1) error {
 	messageID := ""
 	if msg.MessageId != nil {
 		messageID = *msg.MessageId
+	}
+
+	if !core.AllowList(p.allowFrom, userID) {
+		slog.Debug("feishu: message from unauthorized user", "user", userID)
+		return nil
 	}
 
 	if msgType != "" && messageID != "" {

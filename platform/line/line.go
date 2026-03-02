@@ -29,6 +29,7 @@ type replyContext struct {
 type Platform struct {
 	channelSecret string
 	channelToken  string
+	allowFrom     string
 	port          string
 	callbackPath  string
 	bot           *messaging_api.MessagingApiAPI
@@ -39,6 +40,7 @@ type Platform struct {
 func New(opts map[string]any) (core.Platform, error) {
 	secret, _ := opts["channel_secret"].(string)
 	token, _ := opts["channel_token"].(string)
+	allowFrom, _ := opts["allow_from"].(string)
 	if secret == "" || token == "" {
 		return nil, fmt.Errorf("line: channel_secret and channel_token are required")
 	}
@@ -55,6 +57,7 @@ func New(opts map[string]any) (core.Platform, error) {
 	return &Platform{
 		channelSecret: secret,
 		channelToken:  token,
+		allowFrom:     allowFrom,
 		port:          port,
 		callbackPath:  path,
 	}, nil
@@ -106,6 +109,10 @@ func (p *Platform) webhookHandler(w http.ResponseWriter, r *http.Request) {
 		}
 
 		targetID, targetType, userID := extractSource(e.Source)
+		if !core.AllowList(p.allowFrom, userID) {
+			slog.Debug("line: message from unauthorized user", "user", userID)
+			continue
+		}
 		sessionKey := fmt.Sprintf("line:%s", targetID)
 		rctx := replyContext{targetID: targetID, targetType: targetType}
 

@@ -134,6 +134,7 @@ type = "feishu"
 [projects.platforms.options]
 app_id = "your-feishu-app-id"
 app_secret = "your-feishu-app-secret"
+# allow_from = "*"          # Allowed user open_ids, comma-separated; "*" = all (default) / 允许的用户 open_id，逗号分隔；"*" 表示所有（默认）
 # reaction_emoji = "OnIt"  # Emoji reaction on incoming messages (default: "OnIt"); set to "none" to disable
 #                           # 收到消息时添加的表情回复（默认 "OnIt"）；设为 "none" 可禁用
 
@@ -150,6 +151,7 @@ app_secret = "your-feishu-app-secret"
 # [projects.platforms.options]
 # client_id = "your-dingtalk-client-id"
 # client_secret = "your-dingtalk-client-secret"
+# allow_from = "*"  # Allowed staff IDs / 允许的员工 ID
 
 # Telegram (uncomment to enable / 取消注释以启用)
 # 1. Message @BotFather on Telegram, send /newbot to create a bot
@@ -162,6 +164,8 @@ app_secret = "your-feishu-app-secret"
 #
 # [projects.platforms.options]
 # token = "123456:ABC-DEF1234ghIkl-zyx57W2v1u123ew11"
+# allow_from = "*"  # Allowed Telegram user IDs, e.g. "123456789,987654321"; "*" = all
+#                   # 允许的 Telegram 用户 ID，如 "123456789,987654321"；"*" 表示所有
 
 # Slack (uncomment to enable / 取消注释以启用)
 # 1. Create an app at https://api.slack.com/apps / 创建应用
@@ -178,6 +182,7 @@ app_secret = "your-feishu-app-secret"
 # [projects.platforms.options]
 # bot_token = "xoxb-your-bot-token"
 # app_token = "xapp-your-app-level-token"
+# allow_from = "*"  # Allowed Slack user IDs / 允许的 Slack 用户 ID
 
 # Discord (uncomment to enable / 取消注释以启用)
 # 1. Create an app at https://discord.com/developers/applications / 创建应用
@@ -193,6 +198,7 @@ app_secret = "your-feishu-app-secret"
 #
 # [projects.platforms.options]
 # token = "your-discord-bot-token"
+# allow_from = "*"  # Allowed Discord user IDs / 允许的 Discord 用户 ID
 
 # LINE (uncomment to enable / 取消注释以启用)
 # 1. Create a channel at https://developers.line.biz/console/ (Messaging API)
@@ -212,6 +218,7 @@ app_secret = "your-feishu-app-secret"
 # channel_token = "your-line-channel-access-token"
 # port = "8080"
 # callback_path = "/callback"
+# allow_from = "*"  # Allowed LINE user IDs / 允许的 LINE 用户 ID
 
 # WeChat Work / 企业微信 (uncomment to enable / 取消注释以启用)
 # 1. Log in to https://work.weixin.qq.com/wework_admin/frame
@@ -246,6 +253,7 @@ app_secret = "your-feishu-app-secret"
 # callback_path = "/wecom/callback"
 # enable_markdown = false  # set true to send Markdown (only renders in WeChat Work app, NOT personal WeChat)
 #                          # 设为 true 发送 Markdown（仅企业微信应用内可渲染，个人微信显示"暂不支持"）
+# allow_from = "*"  # Allowed WeChat Work user IDs / 允许的企业微信用户 ID
 # proxy = ""  # optional: forward proxy for API calls if your IP is dynamic
 #             # 可选：正向代理，用于 IP 不固定的场景
 #             # e.g. "http://your-vps-ip:8888" — the VPS IP goes into trusted IP list
