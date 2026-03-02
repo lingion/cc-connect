@@ -8,6 +8,7 @@ import (
 	"log/slog"
 	"os"
 	"path/filepath"
+	"strings"
 	"sync"
 	"time"
 
@@ -248,6 +249,22 @@ func (cs *CronScheduler) Store() *CronStore {
 	return cs.store
 }
 
+// NextRun returns the next scheduled run time for a job, or zero if not scheduled.
+func (cs *CronScheduler) NextRun(jobID string) time.Time {
+	cs.mu.RLock()
+	entryID, ok := cs.entries[jobID]
+	cs.mu.RUnlock()
+	if !ok {
+		return time.Time{}
+	}
+	for _, e := range cs.cron.Entries() {
+		if e.ID == entryID {
+			return e.Next
+		}
+	}
+	return time.Time{}
+}
+
 func (cs *CronScheduler) scheduleJob(job *CronJob) error {
 	cs.mu.Lock()
 	defer cs.mu.Unlock()
@@ -307,4 +324,118 @@ func truncateStr(s string, n int) string {
 		return s
 	}
 	return s[:n] + "..."
+}
+
+var weekdayNamesEn = [7]string{"Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"}
+var weekdayNamesZh = [7]string{"周日", "周一", "周二", "周三", "周四", "周五", "周六"}
+var monthNamesEn = [13]string{"", "Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"}
+var monthNamesZh = [13]string{"", "1月", "2月", "3月", "4月", "5月", "6月", "7月", "8月", "9月", "10月", "11月", "12月"}
+
+// CronExprToHuman converts a standard 5-field cron expression to a human-readable string.
+func CronExprToHuman(expr string, zh bool) string {
+	fields := strings.Fields(expr)
+	if len(fields) != 5 {
+		return expr
+	}
+	minute, hour, dom, month, dow := fields[0], fields[1], fields[2], fields[3], fields[4]
+
+	var parts []string
+
+	// Weekday
+	if dow != "*" {
+		if d, err := fmt.Sscanf(dow, "%d", new(int)); err == nil && d == 1 {
+			var n int
+			fmt.Sscanf(dow, "%d", &n)
+			if n >= 0 && n <= 6 {
+				if zh {
+					parts = append(parts, weekdayNamesZh[n])
+				} else {
+					parts = append(parts, "Every "+weekdayNamesEn[n])
+				}
+			}
+		} else {
+			if zh {
+				parts = append(parts, "周("+dow+")")
+			} else {
+				parts = append(parts, "weekday("+dow+")")
+			}
+		}
+	}
+
+	// Month
+	if month != "*" {
+		if m, err := fmt.Sscanf(month, "%d", new(int)); err == nil && m == 1 {
+			var n int
+			fmt.Sscanf(month, "%d", &n)
+			if n >= 1 && n <= 12 {
+				if zh {
+					parts = append(parts, monthNamesZh[n])
+				} else {
+					parts = append(parts, monthNamesEn[n])
+				}
+			}
+		}
+	}
+
+	// Day of month
+	if dom != "*" {
+		if zh {
+			parts = append(parts, dom+"日")
+		} else {
+			parts = append(parts, "day "+dom)
+		}
+	}
+
+	// Time
+	if hour != "*" && minute != "*" {
+		if zh {
+			parts = append(parts, fmt.Sprintf("%s:%s", padZero(hour), padZero(minute)))
+		} else {
+			parts = append(parts, fmt.Sprintf("%s:%s", padZero(hour), padZero(minute)))
+		}
+	} else if hour != "*" {
+		if zh {
+			parts = append(parts, hour+"时")
+		} else {
+			parts = append(parts, "hour "+hour)
+		}
+	} else if minute != "*" {
+		if zh {
+			parts = append(parts, "每小时第"+minute+"分")
+		} else {
+			parts = append(parts, "minute "+minute+" of every hour")
+		}
+	}
+
+	// Frequency hint
+	if dow == "*" && month == "*" && dom == "*" {
+		if zh {
+			return "每天 " + strings.Join(parts, " ")
+		}
+		return "Daily at " + strings.Join(parts, " ")
+	}
+	if dow != "*" && month == "*" && dom == "*" {
+		if zh {
+			return "每" + strings.Join(parts, " ")
+		}
+		return strings.Join(parts, " at ")
+	}
+	if dom != "*" && month == "*" && dow == "*" {
+		if zh {
+			return "每月" + strings.Join(parts, " ")
+		}
+		return "Monthly, " + strings.Join(parts, ", ")
+	}
+
+	if zh {
+		return strings.Join(parts, " ")
+	}
+	return strings.Join(parts, ", ")
+}
+
+func padZero(s string) string {
+	if len(s) == 1 {
+		return "0" + s
+	}
+	return s
 }

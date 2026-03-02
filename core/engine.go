@@ -877,6 +877,13 @@ func (e *Engine) cmdStatus(p Platform, msg *Message) {
 	))
 }
 
+func cronTimeFormat(t, now time.Time) string {
+	if t.Year() != now.Year() {
+		return "2006-01-02 15:04"
+	}
+	return "01-02 15:04"
+}
+
 func formatDuration(d time.Duration) string {
 	d = d.Round(time.Second)
 	days := int(d.Hours()) / 24
@@ -1611,26 +1618,62 @@ func (e *Engine) cmdCronList(p Platform, msg *Message) {
 		return
 	}
 
+	isZh := e.i18n.CurrentLang() == LangChinese
+	now := time.Now()
 	var sb strings.Builder
 	sb.WriteString(fmt.Sprintf(e.i18n.T(MsgCronListTitle), len(jobs)))
-	for _, j := range jobs {
+	sb.WriteString("\n")
+	sb.WriteString("\n")
+
+	for i, j := range jobs {
+		if i > 0 {
+			sb.WriteString("\n")
+		}
+
 		status := "✅"
 		if !j.Enabled {
 			status = "⏸"
 		}
 		desc := j.Description
 		if desc == "" {
-			desc = truncateStr(j.Prompt, 40)
+			desc = truncateStr(j.Prompt, 60)
 		}
-		sb.WriteString(fmt.Sprintf("\n%s `%s` · %s · %s", status, j.ID, j.CronExpr, desc))
+		sb.WriteString(fmt.Sprintf("%s %s\n", status, desc))
+
+		sb.WriteString(fmt.Sprintf("ID: %s\n", j.ID))
+
+		human := CronExprToHuman(j.CronExpr, isZh)
+		if isZh {
+			sb.WriteString(fmt.Sprintf("调度: %s (%s)\n", human, j.CronExpr))
+		} else {
+			sb.WriteString(fmt.Sprintf("Schedule: %s (%s)\n", human, j.CronExpr))
+		}
+
+		nextRun := e.cronScheduler.NextRun(j.ID)
+		if !nextRun.IsZero() {
+			fmtStr := cronTimeFormat(nextRun, now)
+			if isZh {
+				sb.WriteString(fmt.Sprintf("下次执行: %s\n", nextRun.Format(fmtStr)))
+			} else {
+				sb.WriteString(fmt.Sprintf("Next run: %s\n", nextRun.Format(fmtStr)))
+			}
+		}
+
 		if !j.LastRun.IsZero() {
-			sb.WriteString(fmt.Sprintf(" · last: %s", j.LastRun.Format("01-02 15:04")))
-		}
-		if j.LastError != "" {
-			sb.WriteString(fmt.Sprintf(" · ❌ %s", truncateStr(j.LastError, 30)))
+			fmtStr := cronTimeFormat(j.LastRun, now)
+			if isZh {
+				sb.WriteString(fmt.Sprintf("上次执行: %s", j.LastRun.Format(fmtStr)))
+			} else {
+				sb.WriteString(fmt.Sprintf("Last run: %s", j.LastRun.Format(fmtStr)))
+			}
+			if j.LastError != "" {
+				sb.WriteString(fmt.Sprintf(" (failed: %s)", truncateStr(j.LastError, 40)))
+			}
+			sb.WriteString("\n")
 		}
 	}
-	sb.WriteString(fmt.Sprintf("\n\n%s", e.i18n.T(MsgCronListFooter)))
+
+	sb.WriteString(fmt.Sprintf("\n%s", e.i18n.T(MsgCronListFooter)))
 	e.reply(p, msg.ReplyCtx, sb.String())
 }
 
