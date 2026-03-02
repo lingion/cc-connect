@@ -221,7 +221,7 @@ allow_from = "*"  # QQ user IDs, e.g. "12345,67890" or "*" for all
 
 ## Permission Modes
 
-Both agents support permission modes switchable at runtime via `/mode`.
+All agents support permission modes switchable at runtime via `/mode`.
 
 **Claude Code** modes (maps to `--permission-mode`):
 
@@ -241,6 +241,24 @@ Both agents support permission modes switchable at runtime via `/mode`.
 | **Full Auto** | `full-auto` | Auto-approve with workspace sandbox. Recommended. |
 | **YOLO** | `yolo` | Bypass all approvals and sandbox. |
 
+**Cursor Agent** modes (maps to `--force` / `--mode`):
+
+| Mode | Config Value | Behavior |
+|------|-------------|----------|
+| **Default** | `default` | Trust workspace, ask before each tool use. |
+| **Force (YOLO)** | `force` (alias: `yolo`) | Auto-approve all tool calls. |
+| **Plan** | `plan` | Read-only analysis, no edits. |
+| **Ask** | `ask` | Q&A style, read-only. |
+
+**Gemini CLI** modes (maps to `-y` / `--approval-mode`):
+
+| Mode | Config Value | Behavior |
+|------|-------------|----------|
+| **Default** | `default` | Prompt for approval on each tool use. |
+| **Auto Edit** | `auto_edit` (alias: `edit`) | Auto-approve edit tools, ask for others. |
+| **YOLO** | `yolo` | Auto-approve all tool calls. |
+| **Plan** | `plan` | Read-only plan mode, no execution. |
+
 ```toml
 # Claude Code
 [projects.agent.options]
@@ -251,6 +269,14 @@ mode = "default"
 [projects.agent.options]
 mode = "full-auto"
 # model = "o3"
+
+# Cursor Agent
+[projects.agent.options]
+mode = "default"
+
+# Gemini CLI
+[projects.agent.options]
+mode = "default"
 ```
 
 Switch mode at runtime from the chat:

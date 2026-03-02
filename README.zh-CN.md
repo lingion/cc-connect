@@ -224,7 +224,7 @@ allow_from = "*"  # 允许的 QQ 号，如 "12345,67890"，"*" 表示所有
 
 ## 权限模式
 
-两种 Agent 均支持权限模式，可在运行时通过 `/mode` 命令切换。
+所有 Agent 均支持权限模式，可在运行时通过 `/mode` 命令切换。
 
 **Claude Code** 模式（对应 `--permission-mode`）：
 
@@ -244,6 +244,24 @@ allow_from = "*"  # 允许的 QQ 号，如 "12345,67890"，"*" 表示所有
 | **全自动** | `full-auto` | 自动通过，工作区沙箱。推荐日常使用。 |
 | **YOLO 模式** | `yolo` | 跳过所有审批和沙箱。 |
 
+**Cursor Agent** 模式（对应 `--force` / `--mode`）：
+
+| 模式 | 配置值 | 行为 |
+|------|--------|------|
+| **默认** | `default` | 信任工作区，工具调用前询问。 |
+| **强制执行** | `force`（别名: `yolo`）| 自动批准所有工具调用。 |
+| **规划模式** | `plan` | 只读分析，不做修改。 |
+| **问答模式** | `ask` | 问答风格，只读。 |
+
+**Gemini CLI** 模式（对应 `-y` / `--approval-mode`）：
+
+| 模式 | 配置值 | 行为 |
+|------|--------|------|
+| **默认** | `default` | 每次工具调用都需要确认。 |
+| **自动编辑** | `auto_edit`（别名: `edit`）| 编辑工具自动通过，其他仍需确认。 |
+| **全自动** | `yolo` | 自动批准所有工具调用。 |
+| **规划模式** | `plan` | 只读规划模式，不做修改。 |
+
 ```toml
 # Claude Code
 [projects.agent.options]
@@ -254,6 +272,14 @@ mode = "default"
 [projects.agent.options]
 mode = "full-auto"
 # model = "o3"
+
+# Cursor Agent
+[projects.agent.options]
+mode = "default"
+
+# Gemini CLI
+[projects.agent.options]
+mode = "default"
 ```
 
 在聊天中切换模式：
