@@ -258,6 +258,8 @@ app_secret = "your-feishu-app-secret"
 #             # 可选：正向代理，用于 IP 不固定的场景
 #             # e.g. "http://your-vps-ip:8888" — the VPS IP goes into trusted IP list
 #             # 示例："http://你的VPS-IP:8888" — 将 VPS IP 加入可信 IP 列表
+# proxy_username = ""  # optional: proxy authentication username / 代理认证用户名
+# proxy_password = ""  # optional: proxy authentication password / 代理认证密码
 
 # =============================================================================
 # Project 2: Using Cursor Agent / 项目 2：使用 Cursor Agent (uncomment to enable / 取消注释以启用)

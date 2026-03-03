@@ -143,9 +143,14 @@ func New(opts map[string]any) (core.Platform, error) {
 		if err != nil {
 			return nil, fmt.Errorf("wecom: invalid proxy URL %q: %w", proxyURL, err)
 		}
+		proxyUser, _ := opts["proxy_username"].(string)
+		proxyPass, _ := opts["proxy_password"].(string)
+		if proxyUser != "" {
+			u.User = url.UserPassword(proxyUser, proxyPass)
+		}
 		transport.Proxy = http.ProxyURL(u)
 		transport.DisableKeepAlives = true // prevent CONNECT tunnel accumulation on proxy
-		slog.Info("wecom: outbound API requests will use proxy (keep-alive disabled)", "proxy", proxyURL)
+		slog.Info("wecom: outbound API requests will use proxy (keep-alive disabled)", "proxy", u.Host, "auth", proxyUser != "")
 	}
 	apiClient := &http.Client{Timeout: 30 * time.Second, Transport: transport}
 
