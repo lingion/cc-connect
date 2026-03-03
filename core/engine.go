@@ -561,7 +561,7 @@ func (e *Engine) processInteractiveEvents(state *interactiveState, session *Sess
 				permLimit = permLimit * 8 / 5 // permission prompts get ~1.6x more room
 			}
 			prompt := fmt.Sprintf(e.i18n.T(MsgPermissionPrompt), event.ToolName, truncateIf(event.ToolInput, permLimit))
-			e.send(p, replyCtx, prompt)
+			e.sendPermissionPrompt(p, replyCtx, prompt)
 
 			pending := &pendingPermission{
 				RequestID:    event.RequestID,
@@ -1459,6 +1459,30 @@ func (e *Engine) SendToSession(sessionKey, message string) error {
 	state.mu.Unlock()
 
 	return p.Send(e.ctx, replyCtx, message)
+}
+
+// sendPermissionPrompt sends a permission prompt, using inline buttons when the platform supports them.
+func (e *Engine) sendPermissionPrompt(p Platform, replyCtx any, prompt string) {
+	if bs, ok := p.(InlineButtonSender); ok {
+		isZh := e.i18n.CurrentLang() == LangChinese
+		var buttons [][]ButtonOption
+		if isZh {
+			buttons = [][]ButtonOption{
+				{{Text: "✅ 允许", Data: "perm:allow"}, {Text: "❌ 拒绝", Data: "perm:deny"}},
+				{{Text: "✅ 允许所有 (本次会话)", Data: "perm:allow_all"}},
+			}
+		} else {
+			buttons = [][]ButtonOption{
+				{{Text: "✅ Allow", Data: "perm:allow"}, {Text: "❌ Deny", Data: "perm:deny"}},
+				{{Text: "✅ Allow All (this session)", Data: "perm:allow_all"}},
+			}
+		}
+		if err := bs.SendWithButtons(e.ctx, replyCtx, prompt, buttons); err == nil {
+			return
+		}
+		slog.Warn("sendPermissionPrompt: inline buttons failed, falling back to text")
+	}
+	e.send(p, replyCtx, prompt)
 }
 
 // send wraps p.Send with error logging.

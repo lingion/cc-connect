@@ -65,12 +65,18 @@ func (p *Platform) Start(handler core.MessageHandler) error {
 			select {
 			case <-ctx.Done():
 				return
-			case update := <-updates:
-				if update.Message == nil {
-					continue
-				}
+		case update := <-updates:
+			// Handle inline keyboard button clicks
+			if update.CallbackQuery != nil {
+				p.handleCallbackQuery(update.CallbackQuery)
+				continue
+			}
 
-				msg := update.Message
+			if update.Message == nil {
+				continue
+			}
+
+			msg := update.Message
 				userName := msg.From.UserName
 				if userName == "" {
 					userName = strings.TrimSpace(msg.From.FirstName + " " + msg.From.LastName)
@@ -179,6 +185,79 @@ func (p *Platform) Start(handler core.MessageHandler) error {
 	return nil
 }
 
+func (p *Platform) handleCallbackQuery(cb *tgbotapi.CallbackQuery) {
+	if cb.Message == nil || cb.From == nil {
+		return
+	}
+
+	data := cb.Data
+	chatID := cb.Message.Chat.ID
+	msgID := cb.Message.MessageID
+	userID := strconv.FormatInt(cb.From.ID, 10)
+
+	if !core.AllowList(p.allowFrom, userID) {
+		slog.Debug("telegram: callback from unauthorized user", "user", userID)
+		return
+	}
+
+	// Answer the callback to clear the loading indicator
+	answer := tgbotapi.NewCallback(cb.ID, "")
+	p.bot.Request(answer)
+
+	// Map callback data to permission response text
+	var responseText string
+	switch data {
+	case "perm:allow":
+		responseText = "allow"
+	case "perm:deny":
+		responseText = "deny"
+	case "perm:allow_all":
+		responseText = "allow all"
+	default:
+		slog.Debug("telegram: unknown callback data", "data", data)
+		return
+	}
+
+	// Edit the original message to show the choice and remove buttons
+	choiceLabel := responseText
+	switch data {
+	case "perm:allow":
+		choiceLabel = "✅ Allowed"
+	case "perm:deny":
+		choiceLabel = "❌ Denied"
+	case "perm:allow_all":
+		choiceLabel = "✅ Allow All"
+	}
+
+	origText := cb.Message.Text
+	if origText == "" {
+		origText = "(permission request)"
+	}
+	editText := origText + "\n\n" + choiceLabel
+	edit := tgbotapi.NewEditMessageText(chatID, msgID, editText)
+	emptyMarkup := tgbotapi.NewInlineKeyboardMarkup()
+	edit.ReplyMarkup = &emptyMarkup
+	p.bot.Send(edit)
+
+	// Route as a regular message to the engine's permission handler
+	userName := cb.From.UserName
+	if userName == "" {
+		userName = strings.TrimSpace(cb.From.FirstName + " " + cb.From.LastName)
+	}
+	sessionKey := fmt.Sprintf("telegram:%d:%d", chatID, cb.From.ID)
+	rctx := replyContext{chatID: chatID, messageID: msgID}
+
+	coreMsg := &core.Message{
+		SessionKey: sessionKey,
+		Platform:   "telegram",
+		UserID:     userID,
+		UserName:   userName,
+		Content:    responseText,
+		ReplyCtx:   rctx,
+	}
+	p.handler(p, coreMsg)
+}
+
 func (p *Platform) Reply(ctx context.Context, rctx any, content string) error {
 	rc, ok := rctx.(replyContext)
 	if !ok {
@@ -220,6 +299,38 @@ func (p *Platform) Send(ctx context.Context, rctx any, content string) error {
 		}
 		if err != nil {
 			return fmt.Errorf("telegram: send: %w", err)
+		}
+	}
+	return nil
+}
+
+// SendWithButtons sends a message with an inline keyboard.
+func (p *Platform) SendWithButtons(ctx context.Context, rctx any, content string, buttons [][]core.ButtonOption) error {
+	rc, ok := rctx.(replyContext)
+	if !ok {
+		return fmt.Errorf("telegram: invalid reply context type %T", rctx)
+	}
+
+	var rows [][]tgbotapi.InlineKeyboardButton
+	for _, row := range buttons {
+		var btns []tgbotapi.InlineKeyboardButton
+		for _, b := range row {
+			btns = append(btns, tgbotapi.NewInlineKeyboardButtonData(b.Text, b.Data))
+		}
+		rows = append(rows, btns)
+	}
+
+	msg := tgbotapi.NewMessage(rc.chatID, content)
+	msg.ParseMode = tgbotapi.ModeMarkdown
+	msg.ReplyMarkup = tgbotapi.NewInlineKeyboardMarkup(rows...)
+
+	if _, err := p.bot.Send(msg); err != nil {
+		if strings.Contains(err.Error(), "can't parse") {
+			msg.ParseMode = ""
+			_, err = p.bot.Send(msg)
+		}
+		if err != nil {
+			return fmt.Errorf("telegram: sendWithButtons: %w", err)
 		}
 	}
 	return nil

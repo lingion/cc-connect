@@ -67,6 +67,19 @@ type MessageUpdater interface {
 	UpdateMessage(ctx context.Context, replyCtx any, content string) error
 }
 
+// ButtonOption represents a clickable inline button.
+type ButtonOption struct {
+	Text string // display text on the button
+	Data string // callback data returned when clicked (≤64 bytes for Telegram)
+}
+
+// InlineButtonSender is an optional interface for platforms that support
+// sending messages with clickable inline buttons (e.g. Telegram Inline Keyboard).
+// Buttons is a 2D slice: each inner slice is one row of buttons.
+type InlineButtonSender interface {
+	SendWithButtons(ctx context.Context, replyCtx any, content string, buttons [][]ButtonOption) error
+}
+
 // MessageHandler is called by platforms when a new message arrives.
 type MessageHandler func(p Platform, msg *Message)
 
