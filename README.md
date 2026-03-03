@@ -45,9 +45,9 @@ cc-connect bridges AI coding assistants running on your dev machine to the messa
 | Component | Type | Status |
 |-----------|------|--------|
 | Agent | Claude Code | ✅ Supported |
-| Agent | Codex (OpenAI) | ✅ Supported (Beta) |
-| Agent | Cursor Agent | ✅ Supported (Beta) |
-| Agent | Gemini CLI (Google) | ✅ Supported (Beta) |
+| Agent | Codex (OpenAI) | ✅ Supported |
+| Agent | Cursor Agent | ✅ Supported |
+| Agent | Gemini CLI (Google) | ✅ Supported |
 | Agent | Crush / OpenCode | 🔜 Planned |
 | Agent | Goose (Block) | 🔜 Planned |
 | Agent | Aider | 🔜 Planned |
@@ -61,16 +61,16 @@ cc-connect bridges AI coding assistants running on your dev machine to the messa
 | Platform | Discord | ✅ Gateway — no public IP needed |
 | Platform | LINE | ✅ Webhook — public URL required |
 | Platform | WeChat Work (企业微信) | ✅ Webhook — public URL required |
-| Platform | QQ (via NapCat/OneBot) | ✅ Beta — WebSocket, no public IP needed |
+| Platform | QQ (via NapCat/OneBot) | ✅ WebSocket, no public IP needed |
 | Platform | WhatsApp | 🔜 Planned (Business Cloud API) |
 | Platform | Microsoft Teams | 🔜 Planned (Bot Framework) |
 | Platform | Google Chat | 🔜 Planned (Chat API) |
 | Platform | Mattermost | 🔜 Planned (Webhook + Bot) |
 | Platform | Matrix (Element) | 🔜 Planned (Client-Server API) |
-| Feature | Voice Messages (STT) | ✅ Beta — Whisper API (OpenAI / Groq) + ffmpeg |
-| Feature | Image Messages | ✅ Beta — Multimodal (Claude Code) |
-| Feature | API Provider Management | ✅ Beta — Runtime provider switching |
-| Feature | CLI Send (`cc-connect send`) | ✅ Beta — Send messages to sessions via CLI |
+| Feature | Voice Messages (STT) | ✅ Whisper API (OpenAI / Groq) + ffmpeg |
+| Feature | Image Messages | ✅ Multimodal (Claude Code) |
+| Feature | API Provider Management | ✅ Runtime provider switching |
+| Feature | CLI Send (`cc-connect send`) | ✅ Send messages to sessions via CLI |
 
 ## Quick Start
 
@@ -95,12 +95,6 @@ Please refer to https://raw.githubusercontent.com/chenhg5/cc-connect/refs/heads/
 
 ```bash
 npm install -g cc-connect
-```
-
-install beta version:
-
-```bash
-npm install -g cc-connect@beta
 ```
 
 **Download binary from [GitHub Releases](https://github.com/chenhg5/cc-connect/releases):**
@@ -149,8 +143,6 @@ npm install -g cc-connect
 # Binary self-update
 cc-connect update
 
-# Beta / pre-release channel
-npm install -g cc-connect@beta
 cc-connect update --pre
 ```
 
@@ -301,7 +293,7 @@ Switch mode at runtime from the chat:
 /mode default  # switch back to default
 ```
 
-## API Provider Management `Beta`
+## API Provider Management
 
 Switch between different API providers (e.g. Anthropic direct, relay services, AWS Bedrock) at runtime — no restart needed. Provider credentials are injected as environment variables into the agent subprocess, so your local config stays untouched.
 
@@ -373,7 +365,7 @@ Adding, removing, and switching providers all persist to `config.toml` automatic
 
 The `env` map in provider config lets you set arbitrary environment variables for any setup (Bedrock, Vertex, Azure, custom proxies, etc.).
 
-## Voice Messages (Speech-to-Text) `Beta`
+## Voice Messages (Speech-to-Text)
 
 Send voice messages directly — cc-connect transcribes them to text using a configurable STT provider, then forwards the text to the agent.
 
@@ -423,7 +415,7 @@ brew install ffmpeg
 apk add ffmpeg
 ```
 
-## Scheduled Tasks (Cron) `Beta`
+## Scheduled Tasks (Cron)
 
 Create scheduled tasks that run automatically — like daily code reviews, periodic trend summaries, or weekly reports. When a cron job fires, cc-connect sends the prompt to the agent in your chat session and delivers the result back to you.
 

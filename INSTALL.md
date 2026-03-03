@@ -16,12 +16,6 @@ GitHub: https://github.com/chenhg5/cc-connect
 npm install -g cc-connect
 ```
 
-Install beta version:
-
-```bash
-npm install -g cc-connect@beta
-```
-
 After installation, the `cc-connect` binary will be available globally.
 
 ### Option B: Download binary from GitHub Releases
@@ -319,7 +313,7 @@ enable_markdown = false  # true = Markdown messages (WeChat Work app only; perso
 
 **Detailed guide:** [docs/wecom.md](docs/wecom.md)
 
-### QQ (via NapCat / OneBot v11) — No public IP needed `Beta`
+### QQ (via NapCat / OneBot v11) — No public IP needed
 
 QQ integration requires a third-party OneBot v11 implementation (e.g., NapCat) as a bridge.
 
@@ -389,7 +383,7 @@ Once running, send messages to your bot on the configured platform. Available sl
 /mode [name]     — View/switch permission mode (default/edit/plan/yolo)
 /quiet           — Toggle thinking/tool progress messages
 /allow <tool>    — Pre-allow a tool (next session)
-/provider [...]  — Manage API providers (list/add/remove/switch) [Beta]
+/provider [...]  — Manage API providers (list/add/remove/switch)
 /stop            — Stop current execution
 /help            — Show available commands
 ```
@@ -562,9 +556,9 @@ make build
 
 After upgrading, restart the running cc-connect process.
 
-## Beta Features
+## Additional Features
 
-The following features are available in beta (`npm install -g cc-connect@beta` or `cc-connect update --pre`):
+The following additional features are available:
 
 - **Codex Agent**: OpenAI Codex CLI integration (`codex exec --json`)
 - **Cursor Agent**: Cursor Agent CLI integration (`agent --print --output-format stream-json`)
