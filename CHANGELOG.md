@@ -1,20 +1,28 @@
 # Changelog
 
-## v1.1.0-beta.7 (2026-03-02)
+## v1.1.0 (2026-03-02)
 
 ### New Features
+- **`/compress` Command**: Compress/compact conversation context by forwarding native commands to agents (Claude Code `/compact`, Codex `/compact`, Gemini `/compress`); keeps long sessions manageable
+- **Telegram Inline Buttons**: Permission prompts on Telegram now use clickable inline keyboard buttons (Allow / Deny / Allow All) instead of requiring text replies
 - **`/model` Command**: View and switch AI models at runtime; supports numbered quick-select and custom model names. Fetches available models from provider API in real-time (Anthropic, OpenAI, Google), with built-in fallback list
 - **`/memory` Command**: View and edit agent memory files (CLAUDE.md, AGENTS.md, GEMINI.md) directly from chat; supports both project-level and global-level (`/memory global`)
 - **`/status` Command**: Display system status including project, agent, platforms, uptime, language, permission mode, session info, and cron job count
 
 ### Improvements
+- **Cron list display**: Multi-line card-style formatting with human-readable schedule translations and next execution time
 - **Model switch resets session**: Switching model via `/model` now starts a fresh agent session instead of resuming the old one, preventing stale context from affecting the new model
 - **Permission modes docs**: README now documents permission modes for all four agents (Claude Code, Codex, Cursor Agent, Gemini CLI)
 - **Natural language scheduling docs**: INSTALL.md now explains how to enable cron job creation via natural language for non-Claude agents
+- **README revamp**: Redesigned project header with architecture diagram, feature highlights, and multi-agent positioning
 
 ### Bug Fixes
 - **Gemini `/list` summary**: Fixed session list showing raw JSON (`{"dummy": true}`) instead of actual user message summary
 - **GitHub Issue Templates**: Added structured templates for bug reports, feature requests, and platform/agent support requests
+
+## v1.1.0-beta.7 (2026-03-02)
+
+(see v1.1.0 above — beta.7 changes are included in the stable release)
 
 ## v1.1.0-beta.6 (2026-02-28)
 
