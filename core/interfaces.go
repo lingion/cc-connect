@@ -157,6 +157,14 @@ type ModelOption struct {
 	Desc string // short description (display_name or empty)
 }
 
+// ContextCompressor is an optional interface for agents that support
+// compressing/compacting the conversation context within a running session.
+// CompressCommand returns the native slash command (e.g. "/compact", "/compress")
+// that will be forwarded to the agent process. Return "" if not supported.
+type ContextCompressor interface {
+	CompressCommand() string
+}
+
 // ModeSwitcher is an optional interface for agents that support runtime permission mode switching.
 type ModeSwitcher interface {
 	SetMode(mode string)
