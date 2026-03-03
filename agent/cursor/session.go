@@ -96,7 +96,7 @@ func (cs *cursorSession) Send(prompt string, images []core.ImageAttachment) erro
 	cmd.Dir = cs.workDir
 	env := os.Environ()
 	if len(cs.extraEnv) > 0 {
-		env = append(env, cs.extraEnv...)
+		env = core.MergeEnv(env, cs.extraEnv)
 	}
 	cmd.Env = env
 

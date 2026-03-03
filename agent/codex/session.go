@@ -97,7 +97,7 @@ func (cs *codexSession) Send(prompt string, images []core.ImageAttachment) error
 	cmd := exec.CommandContext(cs.ctx, "codex", args...)
 	cmd.Dir = cs.workDir
 	if len(cs.extraEnv) > 0 {
-		cmd.Env = append(os.Environ(), cs.extraEnv...)
+		cmd.Env = core.MergeEnv(os.Environ(), cs.extraEnv)
 	}
 
 	stdout, err := cmd.StdoutPipe()

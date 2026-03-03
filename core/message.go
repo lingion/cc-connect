@@ -5,6 +5,26 @@ import (
 	"time"
 )
 
+// MergeEnv returns base env with entries from extra overriding same-key entries.
+// This prevents duplicate keys (e.g. two PATH entries) which cause the override
+// to be silently ignored on Linux (getenv returns the first match).
+func MergeEnv(base, extra []string) []string {
+	keys := make(map[string]bool, len(extra))
+	for _, e := range extra {
+		if k, _, ok := strings.Cut(e, "="); ok {
+			keys[k] = true
+		}
+	}
+	merged := make([]string, 0, len(base)+len(extra))
+	for _, e := range base {
+		if k, _, ok := strings.Cut(e, "="); ok && keys[k] {
+			continue
+		}
+		merged = append(merged, e)
+	}
+	return append(merged, extra...)
+}
+
 // AllowList checks whether a user ID is permitted based on a comma-separated
 // allow_from string. Returns true if allowFrom is empty or "*" (allow all),
 // or if the userID is in the list. Comparison is case-insensitive.

@@ -74,7 +74,7 @@ func newClaudeSession(ctx context.Context, workDir, model, sessionID, mode strin
 	// since cc-connect is a bridge, not a nested Claude Code session.
 	env := filterEnv(os.Environ(), "CLAUDECODE")
 	if len(extraEnv) > 0 {
-		env = append(env, extraEnv...)
+		env = core.MergeEnv(env, extraEnv)
 	}
 	cmd.Env = env
 

@@ -123,7 +123,7 @@ func (gs *geminiSession) Send(prompt string, images []core.ImageAttachment) erro
 	cmd.Dir = gs.workDir
 	env := os.Environ()
 	if len(gs.extraEnv) > 0 {
-		env = append(env, gs.extraEnv...)
+		env = core.MergeEnv(env, gs.extraEnv)
 	}
 	cmd.Env = env
 

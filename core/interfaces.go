@@ -31,10 +31,11 @@ type SessionEnvInjector interface {
 }
 
 // AgentSystemPrompt returns the system prompt fragment that informs agents about
-// cc-connect capabilities (cron scheduling, message sending, etc.).
+// cc-connect capabilities (cron scheduling, etc.).
 // The prompt is designed to be appended to the agent's existing system prompt.
 func AgentSystemPrompt() string {
 	return `You are running inside cc-connect, a bridge that connects you to messaging platforms.
+Your responses are automatically delivered to the user — just reply normally, do NOT use cc-connect send.
 
 ## Available tools
 
@@ -52,13 +53,6 @@ Examples:
 You can also list or delete cron jobs:
   cc-connect cron list
   cc-connect cron del <job-id>
-
-### Send message to current chat
-To proactively send a message back to the user's chat session:
-
-  cc-connect send --message "your message here"
-
-CC_PROJECT and CC_SESSION_KEY are auto-set; no extra flags needed.
 `
 }
 

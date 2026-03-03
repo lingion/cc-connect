@@ -14,7 +14,8 @@ import (
 )
 
 func runSend(args []string) {
-	var project, sessionKey, dataDir string
+	var project, sessionKey, dataDir, message string
+	var useStdin bool
 
 	var positional []string
 	for i := 0; i < len(args); i++ {
@@ -29,6 +30,13 @@ func runSend(args []string) {
 				i++
 				sessionKey = args[i]
 			}
+		case "--message", "-m":
+			if i+1 < len(args) {
+				i++
+				message = args[i]
+			}
+		case "--stdin":
+			useStdin = true
 		case "--data-dir":
 			if i+1 < len(args) {
 				i++
@@ -42,7 +50,17 @@ func runSend(args []string) {
 		}
 	}
 
-	message := strings.Join(positional, " ")
+	if useStdin {
+		data, err := io.ReadAll(os.Stdin)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "Error reading stdin: %v\n", err)
+			os.Exit(1)
+		}
+		message = strings.TrimSpace(string(data))
+	}
+	if message == "" {
+		message = strings.Join(positional, " ")
+	}
 	if message == "" {
 		fmt.Fprintln(os.Stderr, "Error: message is required")
 		printSendUsage()
@@ -97,10 +115,15 @@ func resolveSocketPath(dataDir string) string {
 
 func printSendUsage() {
 	fmt.Println(`Usage: cc-connect send [options] <message>
+       cc-connect send [options] -m <message>
+       cc-connect send [options] --stdin < file
+       echo "msg" | cc-connect send [options] --stdin
 
 Send a message to an active cc-connect session.
 
 Options:
+  -m, --message <text>     Message to send (preferred over positional args)
+      --stdin              Read message from stdin (best for long/special-char messages)
   -p, --project <name>     Target project (optional if only one project)
   -s, --session <key>      Target session key (optional, picks first active)
       --data-dir <path>    Data directory (default: ~/.cc-connect)
@@ -108,6 +131,8 @@ Options:
 
 Examples:
   cc-connect send "Daily summary: ..."
-  cc-connect send -p my-backend "Build completed successfully"
-  cc-connect send -p my-backend -s "feishu:oc_xxx:ou_yyy" "Scheduled report"`)
+  cc-connect send -m "Build completed successfully"
+  cc-connect send --stdin <<'EOF'
+    Long message with "special" chars, $variables, and newlines
+  EOF`)
 }
