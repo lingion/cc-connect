@@ -796,8 +796,6 @@ func (e *Engine) cmdCurrent(p Platform, msg *Message) {
 }
 
 func (e *Engine) cmdStatus(p Platform, msg *Message) {
-	isZh := e.i18n.CurrentLang() == LangChinese
-
 	// Platforms
 	platNames := make([]string, len(e.platforms))
 	for i, pl := range e.platforms {
@@ -809,44 +807,24 @@ func (e *Engine) cmdStatus(p Platform, msg *Message) {
 	}
 
 	// Uptime
-	uptime := time.Since(e.startedAt)
-	var uptimeStr string
-	if isZh {
-		uptimeStr = formatDurationZh(uptime)
-	} else {
-		uptimeStr = formatDuration(uptime)
-	}
+	uptimeStr := formatDurationI18n(time.Since(e.startedAt), e.i18n.CurrentLang())
 
 	// Language
-	langStr := string(e.i18n.CurrentLang())
-	switch e.i18n.CurrentLang() {
-	case LangChinese:
-		langStr = "zh (中文)"
-	case LangEnglish:
-		langStr = "en (English)"
-	}
+	cur := e.i18n.CurrentLang()
+	langStr := fmt.Sprintf("%s (%s)", string(cur), langDisplayName(cur))
 
 	// Mode (optional)
 	var modeStr string
 	if ms, ok := e.agent.(ModeSwitcher); ok {
 		mode := ms.GetMode()
 		if mode != "" {
-			if isZh {
-				modeStr = fmt.Sprintf("权限模式: %s\n", mode)
-			} else {
-				modeStr = fmt.Sprintf("Mode: %s\n", mode)
-			}
+			modeStr = e.i18n.Tf(MsgStatusMode, mode)
 		}
 	}
 
 	// Session info
-	var sessionStr string
 	s := e.sessions.GetOrCreateActive(msg.SessionKey)
-	if isZh {
-		sessionStr = fmt.Sprintf("当前会话: %s (消息: %d)\n", s.Name, len(s.History))
-	} else {
-		sessionStr = fmt.Sprintf("Session: %s (messages: %d)\n", s.Name, len(s.History))
-	}
+	sessionStr := e.i18n.Tf(MsgStatusSession, s.Name, len(s.History))
 
 	// Cron jobs
 	var cronStr string
@@ -859,11 +837,7 @@ func (e *Engine) cmdStatus(p Platform, msg *Message) {
 					enabledCount++
 				}
 			}
-			if isZh {
-				cronStr = fmt.Sprintf("定时任务: %d (启用: %d)\n", len(jobs), enabledCount)
-			} else {
-				cronStr = fmt.Sprintf("Cron jobs: %d (enabled: %d)\n", len(jobs), enabledCount)
-			}
+			cronStr = e.i18n.Tf(MsgStatusCron, len(jobs), enabledCount)
 		}
 	}
 
@@ -886,32 +860,46 @@ func cronTimeFormat(t, now time.Time) string {
 	return "01-02 15:04"
 }
 
-func formatDuration(d time.Duration) string {
+func formatDurationI18n(d time.Duration, lang Language) string {
 	d = d.Round(time.Second)
 	days := int(d.Hours()) / 24
 	hours := int(d.Hours()) % 24
 	minutes := int(d.Minutes()) % 60
-	if days > 0 {
-		return fmt.Sprintf("%dd %dh %dm", days, hours, minutes)
-	}
-	if hours > 0 {
-		return fmt.Sprintf("%dh %dm", hours, minutes)
-	}
-	return fmt.Sprintf("%dm", minutes)
-}
 
-func formatDurationZh(d time.Duration) string {
-	d = d.Round(time.Second)
-	days := int(d.Hours()) / 24
-	hours := int(d.Hours()) % 24
-	minutes := int(d.Minutes()) % 60
-	if days > 0 {
-		return fmt.Sprintf("%d天 %d小时 %d分钟", days, hours, minutes)
+	switch lang {
+	case LangChinese, LangTraditionalChinese:
+		if days > 0 {
+			return fmt.Sprintf("%d天 %d小时 %d分钟", days, hours, minutes)
+		}
+		if hours > 0 {
+			return fmt.Sprintf("%d小时 %d分钟", hours, minutes)
+		}
+		return fmt.Sprintf("%d分钟", minutes)
+	case LangJapanese:
+		if days > 0 {
+			return fmt.Sprintf("%d日 %d時間 %d分", days, hours, minutes)
+		}
+		if hours > 0 {
+			return fmt.Sprintf("%d時間 %d分", hours, minutes)
+		}
+		return fmt.Sprintf("%d分", minutes)
+	case LangSpanish:
+		if days > 0 {
+			return fmt.Sprintf("%d días %dh %dm", days, hours, minutes)
+		}
+		if hours > 0 {
+			return fmt.Sprintf("%dh %dm", hours, minutes)
+		}
+		return fmt.Sprintf("%dm", minutes)
+	default:
+		if days > 0 {
+			return fmt.Sprintf("%dd %dh %dm", days, hours, minutes)
+		}
+		if hours > 0 {
+			return fmt.Sprintf("%dh %dm", hours, minutes)
+		}
+		return fmt.Sprintf("%dm", minutes)
 	}
-	if hours > 0 {
-		return fmt.Sprintf("%d小时 %d分钟", hours, minutes)
-	}
-	return fmt.Sprintf("%d分钟", minutes)
 }
 
 func (e *Engine) cmdHistory(p Platform, msg *Message, args []string) {
@@ -970,6 +958,12 @@ func (e *Engine) cmdLang(p Platform, msg *Message, args []string) {
 		lang = LangEnglish
 	case "zh", "cn", "chinese", "中文":
 		lang = LangChinese
+	case "zh-tw", "zh_tw", "zhtw", "繁體", "繁体":
+		lang = LangTraditionalChinese
+	case "ja", "jp", "japanese", "日本語":
+		lang = LangJapanese
+	case "es", "spanish", "español":
+		lang = LangSpanish
 	case "auto":
 		lang = LangAuto
 	default:
@@ -988,6 +982,12 @@ func langDisplayName(lang Language) string {
 		return "English"
 	case LangChinese:
 		return "中文"
+	case LangTraditionalChinese:
+		return "繁體中文"
+	case LangJapanese:
+		return "日本語"
+	case LangSpanish:
+		return "Español"
 	default:
 		return "Auto"
 	}
@@ -1007,27 +1007,18 @@ func (e *Engine) cmdModel(p Platform, msg *Message, args []string) {
 	fetchCtx, cancel := context.WithTimeout(e.ctx, 10*time.Second)
 	defer cancel()
 	models := switcher.AvailableModels(fetchCtx)
-	isZh := e.i18n.CurrentLang() == LangChinese
 
 	if len(args) == 0 {
 		var sb strings.Builder
 		current := switcher.GetModel()
 		if current == "" {
-			if isZh {
-				sb.WriteString("当前模型: (未设置，使用 Agent 默认值)\n")
-			} else {
-				sb.WriteString("Current model: (not set, using agent default)\n")
-			}
+			sb.WriteString(e.i18n.T(MsgModelDefault))
 		} else {
 			sb.WriteString(e.i18n.Tf(MsgModelCurrent, current))
 			sb.WriteString("\n")
 		}
 		sb.WriteString("\n")
-		if isZh {
-			sb.WriteString("可用模型:\n")
-		} else {
-			sb.WriteString("Available models:\n")
-		}
+		sb.WriteString(e.i18n.T(MsgModelListTitle))
 		for i, m := range models {
 			marker := "  "
 			if m.Name == current {
@@ -1040,11 +1031,7 @@ func (e *Engine) cmdModel(p Platform, msg *Message, args []string) {
 			sb.WriteString(fmt.Sprintf("%s%d. %s%s\n", marker, i+1, m.Name, desc))
 		}
 		sb.WriteString("\n")
-		if isZh {
-			sb.WriteString("用法: `/model <序号>` 或 `/model <模型名>`")
-		} else {
-			sb.WriteString("Usage: `/model <number>` or `/model <model_name>`")
-		}
+		sb.WriteString(e.i18n.T(MsgModelUsage))
 		e.reply(p, msg.ReplyCtx, sb.String())
 		return
 	}
@@ -1076,23 +1063,19 @@ func (e *Engine) cmdMode(p Platform, msg *Message, args []string) {
 		current := switcher.GetMode()
 		modes := switcher.PermissionModes()
 		var sb strings.Builder
-		isZh := e.i18n.CurrentLang() == LangChinese
+		zhLike := e.i18n.IsZhLike()
 		for _, m := range modes {
 			marker := "  "
 			if m.Key == current {
 				marker = "▶ "
 			}
-			if isZh {
+			if zhLike {
 				sb.WriteString(fmt.Sprintf("%s**%s** — %s\n", marker, m.NameZh, m.DescZh))
 			} else {
 				sb.WriteString(fmt.Sprintf("%s**%s** — %s\n", marker, m.Name, m.Desc))
 			}
 		}
-		if isZh {
-			sb.WriteString("\n使用 `/mode <名称>` 切换模式\n可用值: `default` / `edit` / `plan` / `yolo`")
-		} else {
-			sb.WriteString("\nUse `/mode <name>` to switch.\nAvailable: `default` / `edit` / `plan` / `yolo`")
-		}
+		sb.WriteString(e.i18n.T(MsgModeUsage))
 		e.reply(p, msg.ReplyCtx, sb.String())
 		return
 	}
@@ -1105,10 +1088,10 @@ func (e *Engine) cmdMode(p Platform, msg *Message, args []string) {
 
 	modes := switcher.PermissionModes()
 	displayName := newMode
-	isZh := e.i18n.CurrentLang() == LangChinese
+	zhLike := e.i18n.IsZhLike()
 	for _, m := range modes {
 		if m.Key == newMode {
-			if isZh {
+			if zhLike {
 				displayName = m.NameZh
 			} else {
 				displayName = m.Name
@@ -1464,18 +1447,14 @@ func (e *Engine) SendToSession(sessionKey, message string) error {
 // sendPermissionPrompt sends a permission prompt, using inline buttons when the platform supports them.
 func (e *Engine) sendPermissionPrompt(p Platform, replyCtx any, prompt string) {
 	if bs, ok := p.(InlineButtonSender); ok {
-		isZh := e.i18n.CurrentLang() == LangChinese
-		var buttons [][]ButtonOption
-		if isZh {
-			buttons = [][]ButtonOption{
-				{{Text: "✅ 允许", Data: "perm:allow"}, {Text: "❌ 拒绝", Data: "perm:deny"}},
-				{{Text: "✅ 允许所有 (本次会话)", Data: "perm:allow_all"}},
-			}
-		} else {
-			buttons = [][]ButtonOption{
-				{{Text: "✅ Allow", Data: "perm:allow"}, {Text: "❌ Deny", Data: "perm:deny"}},
-				{{Text: "✅ Allow All (this session)", Data: "perm:allow_all"}},
-			}
+		buttons := [][]ButtonOption{
+			{
+				{Text: e.i18n.T(MsgPermBtnAllow), Data: "perm:allow"},
+				{Text: e.i18n.T(MsgPermBtnDeny), Data: "perm:deny"},
+			},
+			{
+				{Text: e.i18n.T(MsgPermBtnAllowAll), Data: "perm:allow_all"},
+			},
 		}
 		if err := bs.SendWithButtons(e.ctx, replyCtx, prompt, buttons); err == nil {
 			return
@@ -1673,7 +1652,7 @@ func (e *Engine) cmdCronList(p Platform, msg *Message) {
 		return
 	}
 
-	isZh := e.i18n.CurrentLang() == LangChinese
+	lang := e.i18n.CurrentLang()
 	now := time.Now()
 	var sb strings.Builder
 	sb.WriteString(fmt.Sprintf(e.i18n.T(MsgCronListTitle), len(jobs)))
@@ -1697,30 +1676,18 @@ func (e *Engine) cmdCronList(p Platform, msg *Message) {
 
 		sb.WriteString(fmt.Sprintf("ID: %s\n", j.ID))
 
-		human := CronExprToHuman(j.CronExpr, isZh)
-		if isZh {
-			sb.WriteString(fmt.Sprintf("调度: %s (%s)\n", human, j.CronExpr))
-		} else {
-			sb.WriteString(fmt.Sprintf("Schedule: %s (%s)\n", human, j.CronExpr))
-		}
+		human := CronExprToHuman(j.CronExpr, lang)
+		sb.WriteString(e.i18n.Tf(MsgCronScheduleLabel, human, j.CronExpr))
 
 		nextRun := e.cronScheduler.NextRun(j.ID)
 		if !nextRun.IsZero() {
 			fmtStr := cronTimeFormat(nextRun, now)
-			if isZh {
-				sb.WriteString(fmt.Sprintf("下次执行: %s\n", nextRun.Format(fmtStr)))
-			} else {
-				sb.WriteString(fmt.Sprintf("Next run: %s\n", nextRun.Format(fmtStr)))
-			}
+			sb.WriteString(e.i18n.Tf(MsgCronNextRunLabel, nextRun.Format(fmtStr)))
 		}
 
 		if !j.LastRun.IsZero() {
 			fmtStr := cronTimeFormat(j.LastRun, now)
-			if isZh {
-				sb.WriteString(fmt.Sprintf("上次执行: %s", j.LastRun.Format(fmtStr)))
-			} else {
-				sb.WriteString(fmt.Sprintf("Last run: %s", j.LastRun.Format(fmtStr)))
-			}
+			sb.WriteString(e.i18n.Tf(MsgCronLastRunLabel, j.LastRun.Format(fmtStr)))
 			if j.LastError != "" {
 				sb.WriteString(fmt.Sprintf(" (failed: %s)", truncateStr(j.LastError, 40)))
 			}

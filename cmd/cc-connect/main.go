@@ -137,6 +137,12 @@ func main() {
 		switch cfg.Language {
 		case "zh", "chinese":
 			lang = core.LangChinese
+		case "zh-TW", "zh_TW", "zhtw":
+			lang = core.LangTraditionalChinese
+		case "ja", "japanese":
+			lang = core.LangJapanese
+		case "es", "spanish":
+			lang = core.LangSpanish
 		case "en", "english":
 			lang = core.LangEnglish
 		default:

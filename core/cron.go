@@ -326,18 +326,49 @@ func truncateStr(s string, n int) string {
 	return s[:n] + "..."
 }
 
-var weekdayNamesEn = [7]string{"Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"}
-var weekdayNamesZh = [7]string{"周日", "周一", "周二", "周三", "周四", "周五", "周六"}
-var monthNamesEn = [13]string{"", "Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"}
-var monthNamesZh = [13]string{"", "1月", "2月", "3月", "4月", "5月", "6月", "7月", "8月", "9月", "10月", "11月", "12月"}
+var cronWeekdays = map[Language][7]string{
+	LangEnglish:            {"Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"},
+	LangChinese:            {"周日", "周一", "周二", "周三", "周四", "周五", "周六"},
+	LangTraditionalChinese: {"週日", "週一", "週二", "週三", "週四", "週五", "週六"},
+	LangJapanese:           {"日曜", "月曜", "火曜", "水曜", "木曜", "金曜", "土曜"},
+	LangSpanish:            {"domingo", "lunes", "martes", "miércoles", "jueves", "viernes", "sábado"},
+}
+
+var cronMonths = map[Language][13]string{
+	LangEnglish:            {"", "Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"},
+	LangChinese:            {"", "1月", "2月", "3月", "4月", "5月", "6月", "7月", "8月", "9月", "10月", "11月", "12月"},
+	LangTraditionalChinese: {"", "1月", "2月", "3月", "4月", "5月", "6月", "7月", "8月", "9月", "10月", "11月", "12月"},
+	LangJapanese:           {"", "1月", "2月", "3月", "4月", "5月", "6月", "7月", "8月", "9月", "10月", "11月", "12月"},
+	LangSpanish:            {"", "ene", "feb", "mar", "abr", "may", "jun", "jul", "ago", "sep", "oct", "nov", "dic"},
+}
+
+func cronLangNames(lang Language) (weekdays [7]string, months [13]string) {
+	if w, ok := cronWeekdays[lang]; ok {
+		weekdays = w
+	} else {
+		weekdays = cronWeekdays[LangEnglish]
+	}
+	if m, ok := cronMonths[lang]; ok {
+		months = m
+	} else {
+		months = cronMonths[LangEnglish]
+	}
+	return
+}
+
+func isZhLikeLang(lang Language) bool {
+	return lang == LangChinese || lang == LangTraditionalChinese || lang == LangJapanese
+}
 
 // CronExprToHuman converts a standard 5-field cron expression to a human-readable string.
-func CronExprToHuman(expr string, zh bool) string {
+func CronExprToHuman(expr string, lang Language) string {
 	fields := strings.Fields(expr)
 	if len(fields) != 5 {
 		return expr
 	}
 	minute, hour, dom, month, dow := fields[0], fields[1], fields[2], fields[3], fields[4]
+	weekdays, months := cronLangNames(lang)
+	cjk := isZhLikeLang(lang)
 
 	var parts []string
 
@@ -347,18 +378,14 @@ func CronExprToHuman(expr string, zh bool) string {
 			var n int
 			fmt.Sscanf(dow, "%d", &n)
 			if n >= 0 && n <= 6 {
-				if zh {
-					parts = append(parts, weekdayNamesZh[n])
+				if cjk {
+					parts = append(parts, weekdays[n])
 				} else {
-					parts = append(parts, "Every "+weekdayNamesEn[n])
+					parts = append(parts, "Every "+weekdays[n])
 				}
 			}
 		} else {
-			if zh {
-				parts = append(parts, "周("+dow+")")
-			} else {
-				parts = append(parts, "weekday("+dow+")")
-			}
+			parts = append(parts, "weekday("+dow+")")
 		}
 	}
 
@@ -368,18 +395,14 @@ func CronExprToHuman(expr string, zh bool) string {
 			var n int
 			fmt.Sscanf(month, "%d", &n)
 			if n >= 1 && n <= 12 {
-				if zh {
-					parts = append(parts, monthNamesZh[n])
-				} else {
-					parts = append(parts, monthNamesEn[n])
-				}
+				parts = append(parts, months[n])
 			}
 		}
 	}
 
 	// Day of month
 	if dom != "*" {
-		if zh {
+		if cjk {
 			parts = append(parts, dom+"日")
 		} else {
 			parts = append(parts, "day "+dom)
@@ -388,46 +411,61 @@ func CronExprToHuman(expr string, zh bool) string {
 
 	// Time
 	if hour != "*" && minute != "*" {
-		if zh {
-			parts = append(parts, fmt.Sprintf("%s:%s", padZero(hour), padZero(minute)))
-		} else {
-			parts = append(parts, fmt.Sprintf("%s:%s", padZero(hour), padZero(minute)))
-		}
+		parts = append(parts, fmt.Sprintf("%s:%s", padZero(hour), padZero(minute)))
 	} else if hour != "*" {
-		if zh {
-			parts = append(parts, hour+"时")
+		if cjk {
+			parts = append(parts, hour+"時")
 		} else {
 			parts = append(parts, "hour "+hour)
 		}
 	} else if minute != "*" {
-		if zh {
+		switch lang {
+		case LangChinese, LangTraditionalChinese:
 			parts = append(parts, "每小时第"+minute+"分")
-		} else {
+		case LangJapanese:
+			parts = append(parts, "毎時"+minute+"分")
+		default:
 			parts = append(parts, "minute "+minute+" of every hour")
 		}
 	}
 
 	// Frequency hint
 	if dow == "*" && month == "*" && dom == "*" {
-		if zh {
+		switch lang {
+		case LangChinese, LangTraditionalChinese:
 			return "每天 " + strings.Join(parts, " ")
+		case LangJapanese:
+			return "毎日 " + strings.Join(parts, " ")
+		case LangSpanish:
+			return "Diario a las " + strings.Join(parts, " ")
+		default:
+			return "Daily at " + strings.Join(parts, " ")
 		}
-		return "Daily at " + strings.Join(parts, " ")
 	}
 	if dow != "*" && month == "*" && dom == "*" {
-		if zh {
+		switch lang {
+		case LangChinese, LangTraditionalChinese:
 			return "每" + strings.Join(parts, " ")
+		case LangJapanese:
+			return "毎" + strings.Join(parts, " ")
+		default:
+			return strings.Join(parts, " at ")
 		}
-		return strings.Join(parts, " at ")
 	}
 	if dom != "*" && month == "*" && dow == "*" {
-		if zh {
+		switch lang {
+		case LangChinese, LangTraditionalChinese:
 			return "每月" + strings.Join(parts, " ")
+		case LangJapanese:
+			return "毎月" + strings.Join(parts, " ")
+		case LangSpanish:
+			return "Mensual, " + strings.Join(parts, ", ")
+		default:
+			return "Monthly, " + strings.Join(parts, ", ")
 		}
-		return "Monthly, " + strings.Join(parts, ", ")
 	}
 
-	if zh {
+	if cjk {
 		return strings.Join(parts, " ")
 	}
 	return strings.Join(parts, ", ")
