@@ -42,7 +42,7 @@ func New(opts map[string]any) (core.Platform, error) {
 	allowFrom, _ := opts["allow_from"].(string)
 
 	// Build HTTP client with optional proxy support
-	transport := &http.Transport{}
+	httpClient := &http.Client{Timeout: 60 * time.Second}
 	if proxyURL, _ := opts["proxy"].(string); proxyURL != "" {
 		u, err := url.Parse(proxyURL)
 		if err != nil {
@@ -53,10 +53,9 @@ func New(opts map[string]any) (core.Platform, error) {
 		if proxyUser != "" {
 			u.User = url.UserPassword(proxyUser, proxyPass)
 		}
-		transport.Proxy = http.ProxyURL(u)
+		httpClient.Transport = &http.Transport{Proxy: http.ProxyURL(u)}
 		slog.Info("telegram: using proxy", "proxy", u.Host, "auth", proxyUser != "")
 	}
-	httpClient := &http.Client{Timeout: 60 * time.Second, Transport: transport}
 
 	return &Platform{token: token, allowFrom: allowFrom, httpClient: httpClient}, nil
 }
