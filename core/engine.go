@@ -449,10 +449,16 @@ func (e *Engine) SetDisabledCommands(cmds []string) {
 }
 
 // SetAdminFrom sets the admin allowlist for privileged commands.
-// "*" means all users who pass allow_from are admins.
 // Empty string means privileged commands are denied for everyone.
+// The "*" wildcard is NOT supported — admins must be explicitly listed.
 func (e *Engine) SetAdminFrom(adminFrom string) {
 	e.adminFrom = strings.TrimSpace(adminFrom)
+	if e.adminFrom == "*" {
+		slog.Warn("admin_from=\"*\" is not allowed for privileged commands. Set explicit user IDs to enable /shell, /restart, /upgrade.",
+			"project", e.name)
+		e.adminFrom = "" // Reset to deny-all
+		return
+	}
 	if e.adminFrom == "" && !e.disabledCmds["shell"] {
 		slog.Warn("admin_from is not set — privileged commands (/shell, /restart, /upgrade) are blocked. "+
 			"Set admin_from in config to enable them, or use disabled_commands to hide them.",
@@ -469,13 +475,16 @@ var privilegedCommands = map[string]bool{
 
 // isAdmin checks whether the given user ID is authorized for privileged commands.
 // Unlike AllowList, empty adminFrom means deny-all (fail-closed).
+// The "*" wildcard is NOT supported for admin_from — admins must be explicitly listed.
 func (e *Engine) isAdmin(userID string) bool {
 	af := strings.TrimSpace(e.adminFrom)
 	if af == "" {
 		return false
 	}
+	// "*" is not allowed for admin_from — require explicit user IDs
 	if af == "*" {
-		return true
+		slog.Warn("admin_from=\"*\" is not allowed for privileged commands. Set explicit user IDs.", "project", e.name)
+		return false
 	}
 	for _, id := range strings.Split(af, ",") {
 		if strings.EqualFold(strings.TrimSpace(id), userID) {

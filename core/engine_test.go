@@ -411,11 +411,12 @@ func TestEngine_AdminFrom_Wildcard(t *testing.T) {
 	e := newTestEngine()
 	e.SetAdminFrom("*")
 
-	if !e.isAdmin("anyone") {
-		t.Error("wildcard admin_from should allow any user")
+	// Wildcard "*" is NOT allowed for admin_from - it should deny all
+	if e.isAdmin("anyone") {
+		t.Error("wildcard admin_from should NOT allow any user")
 	}
-	if !e.isAdmin("12345") {
-		t.Error("wildcard admin_from should allow any user ID")
+	if e.isAdmin("12345") {
+		t.Error("wildcard admin_from should NOT allow any user ID")
 	}
 }
 

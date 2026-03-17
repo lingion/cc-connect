@@ -591,7 +591,7 @@ func (p *Platform) downloadFile(fileID string) ([]byte, error) {
 	fileConfig := tgbotapi.FileConfig{FileID: fileID}
 	file, err := p.bot.GetFile(fileConfig)
 	if err != nil {
-		return nil, fmt.Errorf("get file: %w", err)
+		return nil, fmt.Errorf("get file: %s", core.RedactToken(err.Error(), p.bot.Token))
 	}
 	link := file.Link(p.bot.Token)
 
