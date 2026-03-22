@@ -15,6 +15,10 @@ const (
 	messageStateFinish = 2
 
 	sessionExpiredErrcode = -14
+
+	uploadMediaImage = 1
+	uploadMediaVideo = 2
+	uploadMediaFile  = 3
 )
 
 type baseInfo struct {
@@ -39,6 +43,32 @@ type textItem struct {
 	Text string `json:"text,omitempty"`
 }
 
+// cdnMedia mirrors CDNMedia in the ilink JSON API.
+type cdnMedia struct {
+	EncryptQueryParam string `json:"encrypt_query_param,omitempty"`
+	AESKey            string `json:"aes_key,omitempty"`
+	EncryptType       int    `json:"encrypt_type,omitempty"`
+}
+
+type imageItem struct {
+	Media      *cdnMedia `json:"media,omitempty"`
+	ThumbMedia *cdnMedia `json:"thumb_media,omitempty"`
+	AESKeyHex  string    `json:"aeskey,omitempty"` // inbound: raw key as hex (16 bytes)
+	MidSize    int       `json:"mid_size,omitempty"`
+}
+
+type fileItem struct {
+	Media    *cdnMedia `json:"media,omitempty"`
+	FileName string    `json:"file_name,omitempty"`
+	Len      string    `json:"len,omitempty"`
+}
+
+type videoItem struct {
+	Media      *cdnMedia `json:"media,omitempty"`
+	ThumbMedia *cdnMedia `json:"thumb_media,omitempty"`
+	VideoSize  int       `json:"video_size,omitempty"`
+}
+
 type refMessage struct {
 	MessageItem *messageItem `json:"message_item,omitempty"`
 	Title       string       `json:"title,omitempty"`
@@ -48,11 +78,33 @@ type messageItem struct {
 	Type      int         `json:"type,omitempty"`
 	TextItem  *textItem   `json:"text_item,omitempty"`
 	VoiceItem *voiceItem  `json:"voice_item,omitempty"`
+	ImageItem *imageItem  `json:"image_item,omitempty"`
+	FileItem  *fileItem   `json:"file_item,omitempty"`
+	VideoItem *videoItem  `json:"video_item,omitempty"`
 	RefMsg    *refMessage `json:"ref_msg,omitempty"`
 }
 
 type voiceItem struct {
-	Text string `json:"text,omitempty"`
+	Media      *cdnMedia `json:"media,omitempty"`
+	Text       string    `json:"text,omitempty"`
+	EncodeType int       `json:"encode_type,omitempty"`
+}
+
+type getUploadURLRequest struct {
+	Filekey     string   `json:"filekey,omitempty"`
+	MediaType   int      `json:"media_type,omitempty"`
+	ToUserID    string   `json:"to_user_id,omitempty"`
+	Rawsize     int      `json:"rawsize,omitempty"`
+	Rawfilemd5  string   `json:"rawfilemd5,omitempty"`
+	Filesize    int      `json:"filesize,omitempty"`
+	NoNeedThumb bool     `json:"no_need_thumb,omitempty"`
+	Aeskey      string   `json:"aeskey,omitempty"`
+	BaseInfo    baseInfo `json:"base_info"`
+}
+
+type getUploadURLResponse struct {
+	UploadParam      string `json:"upload_param,omitempty"`
+	ThumbUploadParam string `json:"thumb_upload_param,omitempty"`
 }
 
 type weixinMessage struct {

@@ -38,6 +38,7 @@ type replyContext struct {
 type Platform struct {
 	token        string
 	baseURL      string
+	cdnBaseURL   string
 	allowFrom    string
 	routeTag     string
 	stateDir     string
@@ -85,7 +86,7 @@ func sanitizePathSegment(s string) string {
 }
 
 // New constructs a Weixin platform. Required options: token.
-// Optional: base_url, cdn_base_url, allow_from, route_tag, account_id, long_poll_timeout_ms,
+// Optional: base_url, cdn_base_url (default https://novac2c.cdn.weixin.qq.com/c2c), allow_from, route_tag, account_id, long_poll_timeout_ms,
 // state_dir (override persistence dir), proxy, cc_data_dir + cc_project (injected by main).
 func New(opts map[string]any) (core.Platform, error) {
 	token, _ := opts["token"].(string)
@@ -96,6 +97,11 @@ func New(opts map[string]any) (core.Platform, error) {
 	core.CheckAllowFrom("weixin", allowFrom)
 
 	baseURL, _ := opts["base_url"].(string)
+	cdnBaseURL, _ := opts["cdn_base_url"].(string)
+	if strings.TrimSpace(cdnBaseURL) == "" {
+		cdnBaseURL = defaultCDNBaseURL
+	}
+	cdnBaseURL = strings.TrimRight(strings.TrimSpace(cdnBaseURL), "/")
 	routeTag, _ := opts["route_tag"].(string)
 	accountLabel, _ := opts["account_id"].(string)
 	if accountLabel == "" {
@@ -132,6 +138,7 @@ func New(opts map[string]any) (core.Platform, error) {
 	p := &Platform{
 		token:        token,
 		baseURL:      baseURL,
+		cdnBaseURL:   cdnBaseURL,
 		allowFrom:    allowFrom,
 		routeTag:     routeTag,
 		stateDir:     stateDir,
@@ -347,12 +354,12 @@ func (p *Platform) pollLoop(ctx context.Context) {
 			continue
 		}
 		for i := range resp.Msgs {
-			p.dispatchInbound(&resp.Msgs[i], h)
+			p.dispatchInbound(ctx, &resp.Msgs[i], h)
 		}
 	}
 }
 
-func (p *Platform) dispatchInbound(m *weixinMessage, h core.MessageHandler) {
+func (p *Platform) dispatchInbound(ctx context.Context, m *weixinMessage, h core.MessageHandler) {
 	if m == nil {
 		return
 	}
@@ -401,10 +408,11 @@ func (p *Platform) dispatchInbound(m *weixinMessage, h core.MessageHandler) {
 	}
 
 	body := bodyFromItemList(m.ItemList)
-	if strings.TrimSpace(body) == "" && mediaOnlyItems(m.ItemList) {
-		body = "[收到媒体消息：当前版本仅支持文字与语音转文字，请改用文字说明或等待语音转写结果。]"
+	images, files, audio := p.collectInboundMedia(ctx, m.ItemList)
+	if strings.TrimSpace(body) == "" && len(images) == 0 && len(files) == 0 && audio == nil && mediaOnlyItems(m.ItemList) {
+		body = "[收到媒体消息：CDN 下载或解密失败，或未配置 cdn_base_url；请改用文字说明。]"
 	}
-	if strings.TrimSpace(body) == "" {
+	if strings.TrimSpace(body) == "" && len(images) == 0 && len(files) == 0 && audio == nil {
 		return
 	}
 
@@ -421,6 +429,9 @@ func (p *Platform) dispatchInbound(m *weixinMessage, h core.MessageHandler) {
 		UserID:     from,
 		UserName:   shortWeixinUser(from),
 		Content:    body,
+		Images:     images,
+		Files:      files,
+		Audio:      audio,
 		ReplyCtx:   rc,
 	})
 }
@@ -520,4 +531,6 @@ var (
 	_ core.Platform                      = (*Platform)(nil)
 	_ core.ReplyContextReconstructor     = (*Platform)(nil)
 	_ core.FormattingInstructionProvider = (*Platform)(nil)
+	_ core.ImageSender                   = (*Platform)(nil)
+	_ core.FileSender                    = (*Platform)(nil)
 )

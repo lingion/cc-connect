@@ -165,6 +165,26 @@ func (c *apiClient) sendMessage(ctx context.Context, msg *sendMessageReq) error 
 	return err
 }
 
+func (c *apiClient) getUploadURL(ctx context.Context, req getUploadURLRequest) (*getUploadURLResponse, error) {
+	req.BaseInfo = baseInfo{ChannelVersion: channelVersion}
+	payload, err := json.Marshal(req)
+	if err != nil {
+		return nil, err
+	}
+	raw, err := c.post(ctx, "ilink/bot/getuploadurl", payload, 0, "getUploadUrl")
+	if err != nil {
+		return nil, err
+	}
+	var out getUploadURLResponse
+	if err := json.Unmarshal(raw, &out); err != nil {
+		return nil, fmt.Errorf("weixin: getUploadUrl json: %w", err)
+	}
+	if strings.TrimSpace(out.UploadParam) == "" {
+		return nil, fmt.Errorf("weixin: getUploadUrl: empty upload_param in %s", truncateForLog(raw, 512))
+	}
+	return &out, nil
+}
+
 func (c *apiClient) sendText(ctx context.Context, to, text, contextToken, clientID string) error {
 	if strings.TrimSpace(contextToken) == "" {
 		return fmt.Errorf("weixin: context_token is required for send")

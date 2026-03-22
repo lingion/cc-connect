@@ -65,6 +65,9 @@ func main() {
 		case "feishu":
 			runFeishu(os.Args[2:])
 			return
+		case "weixin":
+			runWeixin(os.Args[2:])
+			return
 		}
 	}
 
@@ -871,6 +874,11 @@ Commands:
     new              Force QR onboarding to create a new bot
     bind             Bind existing app_id/app_secret
 
+  weixin             Setup Weixin personal (ilink) via QR or token
+    setup            QR login, or bind when --token is provided
+    new              Force QR login
+    bind             Bind existing ilink bot token
+
   update             Check for updates and upgrade the binary (--pre for beta)
   check-update       Check if a newer version is available
   config-example     Print a complete annotated config.toml example
@@ -883,6 +891,7 @@ Examples:
   cc-connect send -m "hello"          Send a message to the active session
   cc-connect cron list                List all scheduled tasks
   cc-connect feishu setup             Setup Feishu/Lark bot credentials
+  cc-connect weixin setup             Setup Weixin (ilink) with QR or --token
   cc-connect update                   Update to the latest version
   cc-connect config-example           Print full config.toml example
   cc-connect config-example > c.toml  Save example config to a file
