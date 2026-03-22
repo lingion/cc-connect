@@ -155,7 +155,13 @@ func main() {
 
 		var platforms []core.Platform
 		for _, pc := range proj.Platforms {
-			p, err := core.CreatePlatform(pc.Type, pc.Options)
+			opts := make(map[string]any, len(pc.Options)+2)
+			for k, v := range pc.Options {
+				opts[k] = v
+			}
+			opts["cc_data_dir"] = cfg.DataDir
+			opts["cc_project"] = proj.Name
+			p, err := core.CreatePlatform(pc.Type, opts)
 			if err != nil {
 				slog.Error("failed to create platform", "project", proj.Name, "type", pc.Type, "error", err)
 				os.Exit(1)
@@ -815,7 +821,7 @@ func printUsage() {
 
   Bridge your messaging platforms to local AI coding agents.
   Supports: Claude Code, Codex, Cursor, Gemini CLI, Qoder CLI, OpenCode
-  Platforms: Feishu, Telegram, Slack, DingTalk, Discord, LINE, WeChat Work, QQ, QQ Bot
+  Platforms: Feishu, Telegram, Slack, DingTalk, Discord, LINE, WeChat Work, Weixin, QQ, QQ Bot
 
   GitHub:  https://github.com/chenhg5/cc-connect
   Docs:    https://github.com/chenhg5/cc-connect/blob/main/INSTALL.md
