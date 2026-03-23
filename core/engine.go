@@ -2462,7 +2462,6 @@ func (e *Engine) processInteractiveEvents(state *interactiveState, session *Sess
 					if err := <-pendingSend; err != nil {
 						slog.Debug("async send error before compress", "error", err)
 					}
-					pendingSend = nil
 				}
 				state.mu.Lock()
 				state.lastAutoCompressAt = time.Now()
@@ -2505,7 +2504,6 @@ func (e *Engine) processInteractiveEvents(state *interactiveState, session *Sess
 					if err := <-pendingSend; err != nil {
 						slog.Debug("async send error before queued turn", "error", err)
 					}
-					pendingSend = nil
 				}
 
 				queuedPrompt := e.buildSenderPrompt(queued.content, queued.userID, queued.msgPlatform, queued.msgSessionKey)
@@ -2553,7 +2551,6 @@ func (e *Engine) processInteractiveEvents(state *interactiveState, session *Sess
 				if err := <-pendingSend; err != nil {
 					slog.Debug("async send error after EventResult", "error", err)
 				}
-				pendingSend = nil
 			}
 			return
 
