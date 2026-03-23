@@ -23,12 +23,13 @@ type Agent struct {
 	args       []string
 	extraEnv   []string
 	sessionEnv []string
+	authMethod string // optional, e.g. "cursor_login" for Cursor CLI (see authenticate RPC)
 	mu         sync.RWMutex
 }
 
 // New builds an acp agent from project options.
 // Required: options["command"] — executable name or path for the ACP agent.
-// Optional: options["args"] ([]any or []string), options["env"] (map[string]string merged into the process environment).
+// Optional: options["args"], options["env"], options["auth_method"] (e.g. "cursor_login" after initialize).
 func New(opts map[string]any) (core.Agent, error) {
 	workDir, _ := opts["work_dir"].(string)
 	if workDir == "" {
@@ -45,12 +46,15 @@ func New(opts map[string]any) (core.Agent, error) {
 
 	args := parseStringSlice(opts["args"])
 	extra := envPairsFromOpts(opts)
+	authMethod, _ := opts["auth_method"].(string)
+	authMethod = strings.TrimSpace(authMethod)
 
 	return &Agent{
-		workDir:  workDir,
-		command:  cmdStr,
-		args:     args,
-		extraEnv: extra,
+		workDir:    workDir,
+		command:    cmdStr,
+		args:       args,
+		extraEnv:   extra,
+		authMethod: authMethod,
 	}, nil
 }
 
@@ -125,11 +129,12 @@ func (a *Agent) StartSession(ctx context.Context, sessionID string) (core.AgentS
 	command := a.command
 	args := a.args
 	workDir := a.workDir
+	authMethod := a.authMethod
 	extra := append([]string(nil), a.extraEnv...)
 	extra = append(extra, a.sessionEnv...)
 	a.mu.RUnlock()
 
-	return newACPSession(ctx, command, args, extra, workDir, sessionID)
+	return newACPSession(ctx, command, args, extra, workDir, sessionID, authMethod)
 }
 
 func (a *Agent) ListSessions(context.Context) ([]core.AgentSessionInfo, error) {

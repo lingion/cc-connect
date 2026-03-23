@@ -50,6 +50,7 @@ func newACPSession(
 	extraEnv []string,
 	workDir string,
 	resumeSessionID string,
+	authMethod string,
 ) (*acpSession, error) {
 	absWorkDir, err := filepath.Abs(workDir)
 	if err != nil {
@@ -109,7 +110,7 @@ func newACPSession(
 		s.alive.Store(false)
 	}()
 
-	if err := s.handshake(resumeSessionID); err != nil {
+	if err := s.handshake(resumeSessionID, authMethod); err != nil {
 		_ = s.Close()
 		return nil, err
 	}
@@ -117,9 +118,16 @@ func newACPSession(
 	return s, nil
 }
 
-func (s *acpSession) handshake(resumeSessionID string) error {
+func (s *acpSession) handshake(resumeSessionID string, authMethod string) error {
 	initParams := map[string]any{
 		"protocolVersion": 1,
+		"clientCapabilities": map[string]any{
+			"fs": map[string]any{
+				"readTextFile":  false,
+				"writeTextFile": false,
+			},
+			"terminal": false,
+		},
 		"clientInfo": map[string]any{
 			"name":    "cc-connect",
 			"version": "1.0.0",
@@ -140,6 +148,15 @@ func (s *acpSession) handshake(resumeSessionID string) error {
 		return fmt.Errorf("acp: parse initialize result: %w", err)
 	}
 	slog.Debug("acp: initialized", "protocol", initOut.ProtocolVersion, "load_session", initOut.AgentCapabilities.LoadSession)
+
+	if strings.TrimSpace(authMethod) != "" {
+		if _, err := s.tr.call(s.ctx, "authenticate", map[string]any{
+			"methodId": authMethod,
+		}); err != nil {
+			return fmt.Errorf("acp: authenticate (%s): %w", authMethod, err)
+		}
+		slog.Debug("acp: authenticated", "method_id", authMethod)
+	}
 
 	wantResume := resumeSessionID != "" && resumeSessionID != core.ContinueSession
 	if wantResume && initOut.AgentCapabilities.LoadSession {
@@ -210,7 +227,16 @@ func (s *acpSession) onServerRequest(method string, id json.RawMessage, params j
 	switch method {
 	case "session/request_permission":
 		s.handlePermissionRequest(id, params)
+	case "cursor/ask_question", "cursor/create_plan", "cursor/update_todos", "cursor/task", "cursor/generate_image":
+		// Cursor CLI extensions — acknowledge so tool flows do not block; IM UX is limited for these.
+		slog.Debug("acp: cursor extension request (no-op ack)", "method", method)
+		_ = s.tr.respondSuccess(id, map[string]any{})
 	default:
+		if strings.HasPrefix(method, "cursor/") {
+			slog.Debug("acp: unknown cursor extension, ack empty", "method", method)
+			_ = s.tr.respondSuccess(id, map[string]any{})
+			return
+		}
 		slog.Info("acp: unhandled server request", "method", method)
 		_ = s.tr.respondError(id, -32601, "method not implemented")
 	}

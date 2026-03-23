@@ -1132,7 +1132,8 @@ app_secret = "your-feishu-app-secret"
 # [projects.agent.options]
 # work_dir = "/path/to/project"
 # command = "your-acp-agent"   # required; must be on PATH or an absolute path
-# args = []                     # optional extra argv (after the command)
+# args = ["acp"]                # e.g. Cursor CLI: agent binary + "acp" subcommand
+# auth_method = "cursor_login"  # Cursor CLI requires authenticate after initialize
 # # env = { KEY = "value" }     # optional extra environment variables
 #
 # [[projects.platforms]]
