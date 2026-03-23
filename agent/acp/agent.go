@@ -18,18 +18,19 @@ func init() {
 
 // Agent runs an ACP (Agent Client Protocol) agent subprocess over stdio JSON-RPC.
 type Agent struct {
-	workDir    string
-	command    string
-	args       []string
-	extraEnv   []string
-	sessionEnv []string
-	authMethod string // optional, e.g. "cursor_login" for Cursor CLI (see authenticate RPC)
-	mu         sync.RWMutex
+	workDir     string
+	command     string
+	args        []string
+	extraEnv    []string
+	sessionEnv  []string
+	authMethod  string // optional, e.g. "cursor_login" for Cursor CLI (see authenticate RPC)
+	displayName string // optional, for doctor (default "ACP")
+	mu          sync.RWMutex
 }
 
 // New builds an acp agent from project options.
 // Required: options["command"] — executable name or path for the ACP agent.
-// Optional: options["args"], options["env"], options["auth_method"] (e.g. "cursor_login" after initialize).
+// Optional: options["args"], options["env"], options["auth_method"], options["display_name"].
 func New(opts map[string]any) (core.Agent, error) {
 	workDir, _ := opts["work_dir"].(string)
 	if workDir == "" {
@@ -48,13 +49,19 @@ func New(opts map[string]any) (core.Agent, error) {
 	extra := envPairsFromOpts(opts)
 	authMethod, _ := opts["auth_method"].(string)
 	authMethod = strings.TrimSpace(authMethod)
+	displayName, _ := opts["display_name"].(string)
+	displayName = strings.TrimSpace(displayName)
+	if displayName == "" {
+		displayName = "ACP"
+	}
 
 	return &Agent{
-		workDir:    workDir,
-		command:    cmdStr,
-		args:       args,
-		extraEnv:   extra,
-		authMethod: authMethod,
+		workDir:     workDir,
+		command:     cmdStr,
+		args:        args,
+		extraEnv:    extra,
+		authMethod:  authMethod,
+		displayName: displayName,
 	}, nil
 }
 
@@ -153,4 +160,12 @@ func (a *Agent) CLIBinaryName() string {
 	return filepath.Base(cmd)
 }
 
-func (a *Agent) CLIDisplayName() string { return "ACP" }
+func (a *Agent) CLIDisplayName() string {
+	a.mu.RLock()
+	n := a.displayName
+	a.mu.RUnlock()
+	if n == "" {
+		return "ACP"
+	}
+	return n
+}
