@@ -186,6 +186,7 @@ func (p *Platform) handleEvent(evt socketmode.Event) {
 
 				var images []core.ImageAttachment
 				var audio *core.AudioAttachment
+				var files []core.FileAttachment
 				for _, f := range ev.Files {
 					// Prefer URLPrivateDownload, fall back to URLPrivate
 					fileURL := f.URLPrivateDownload
@@ -219,10 +220,20 @@ func (p *Platform) handleEvent(evt socketmode.Event) {
 						images = append(images, core.ImageAttachment{
 							MimeType: f.Mimetype, Data: imgData, FileName: f.Name,
 						})
+					} else {
+						// Non-image/non-audio files: download and add as FileAttachment
+						fileData, err := p.downloadSlackFile(fileURL)
+						if err != nil {
+							slog.Error("slack: download file failed", "error", err, "url", core.RedactToken(fileURL, p.botToken))
+							continue
+						}
+						files = append(files, core.FileAttachment{
+							MimeType: f.Mimetype, Data: fileData, FileName: f.Name,
+						})
 					}
 				}
 
-				if ev.Text == "" && len(images) == 0 && audio == nil {
+				if ev.Text == "" && len(images) == 0 && audio == nil && len(files) == 0 {
 					return
 				}
 
@@ -230,7 +241,7 @@ func (p *Platform) handleEvent(evt socketmode.Event) {
 					SessionKey: sessionKey, Platform: "slack",
 					UserID: ev.User, UserName: p.resolveUserName(ev.User),
 					ChatName: p.resolveChannelNameForMsg(ev.Channel),
-					Content: ev.Text, Images: images, Audio: audio,
+					Content: ev.Text, Images: images, Files: files, Audio: audio,
 					MessageID: ts,
 					ReplyCtx: replyContext{channel: ev.Channel, timestamp: ts},
 				}

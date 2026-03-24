@@ -727,6 +727,9 @@ func (p *Platform) SendImage(ctx context.Context, rctx any, img core.ImageAttach
 }
 
 var _ core.ImageSender = (*Platform)(nil)
+var _ core.PreviewStarter = (*Platform)(nil)
+var _ core.MessageUpdater = (*Platform)(nil)
+var _ core.PreviewCleaner = (*Platform)(nil)
 
 func (p *Platform) ReconstructReplyCtx(sessionKey string) (any, error) {
 	// discord:{channelID}:{userID} or discord:{threadID}
