@@ -13,9 +13,11 @@ import (
 	"fmt"
 	"io"
 	"log/slog"
+	"mime"
 	"mime/multipart"
 	"net/http"
 	"net/url"
+	"path/filepath"
 	"sort"
 	"strconv"
 	"strings"
@@ -47,7 +49,8 @@ type xmlMessage struct {
 	Content      string   `xml:"Content"`
 	PicUrl       string   `xml:"PicUrl"`
 	MediaId      string   `xml:"MediaId"`
-	Format       string   `xml:"Format"` // voice format: amr, speex, etc.
+	FileName     string   `xml:"FileName"` // inbound file messages (MsgType=file)
+	Format       string   `xml:"Format"`   // voice format: amr, speex, etc.
 	MsgId        int64    `xml:"MsgId"`
 	AgentID      int64    `xml:"AgentID"`
 }
@@ -346,6 +349,36 @@ func (p *Platform) handleMessage(w http.ResponseWriter, r *http.Request, msgSig,
 				MessageID: strconv.FormatInt(msg.MsgId, 10),
 				UserID:    msg.FromUserName, UserName: p.resolveUserName(msg.FromUserName),
 				Audio:    &core.AudioAttachment{MimeType: "audio/" + format, Data: audioData, Format: format},
+				ReplyCtx: rctx,
+			})
+		}()
+
+	case "file":
+		slog.Debug("wecom: file received", "user", msg.FromUserName, "name", msg.FileName, "media_id_len", len(msg.MediaId))
+		if msg.MediaId == "" {
+			slog.Warn("wecom: file message missing MediaId")
+			return
+		}
+		go func() {
+			fileData, err := p.downloadMedia(msg.MediaId)
+			if err != nil {
+				slog.Error("wecom: download file failed", "error", err)
+				return
+			}
+			baseName := filepath.Base(strings.TrimSpace(msg.FileName))
+			if baseName == "" || baseName == "." {
+				baseName = "attachment"
+			}
+			mt := wecomInboundFileMime(baseName, fileData)
+			p.handler(p, &core.Message{
+				SessionKey: sessionKey, Platform: "wecom",
+				MessageID: strconv.FormatInt(msg.MsgId, 10),
+				UserID:    msg.FromUserName, UserName: p.resolveUserName(msg.FromUserName),
+				Files: []core.FileAttachment{{
+					MimeType: mt,
+					Data:     fileData,
+					FileName: baseName,
+				}},
 				ReplyCtx: rctx,
 			})
 		}()
@@ -712,6 +745,22 @@ func (p *Platform) resolveUserName(userID string) string {
 		return result.Name
 	}
 	return userID
+}
+
+// wecomInboundFileMime infers MIME type from filename extension, then from content sniffing.
+func wecomInboundFileMime(fileName string, data []byte) string {
+	ext := strings.ToLower(filepath.Ext(fileName))
+	if ext != "" {
+		if mt := mime.TypeByExtension(ext); mt != "" {
+			return mt
+		}
+	}
+	if len(data) > 0 {
+		if sniff := http.DetectContentType(data); sniff != "" {
+			return sniff
+		}
+	}
+	return "application/octet-stream"
 }
 
 func (p *Platform) downloadMedia(mediaID string) ([]byte, error) {
