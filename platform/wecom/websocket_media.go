@@ -87,8 +87,7 @@ func wsCollectInboundParts(body *wsMsgCallbackBody) (texts []string, imgs, files
 			files = append(files, wsMediaRef{URL: url, Aeskey: aeskey})
 		}
 	}
-	var walkMixed func(*wsMixedBlock)
-	walkMixed = func(m *wsMixedBlock) {
+	walkMixed := func(m *wsMixedBlock) {
 		if m == nil {
 			return
 		}
@@ -109,8 +108,7 @@ func wsCollectInboundParts(body *wsMsgCallbackBody) (texts []string, imgs, files
 			}
 		}
 	}
-	var walkQuote func(*wsQuoteBlock)
-	walkQuote = func(q *wsQuoteBlock) {
+	walkQuote := func(q *wsQuoteBlock) {
 		if q == nil {
 			return
 		}
