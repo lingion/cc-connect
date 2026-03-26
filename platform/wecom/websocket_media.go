@@ -5,6 +5,7 @@ import (
 	"crypto/aes"
 	"crypto/cipher"
 	"encoding/base64"
+	"encoding/hex"
 	"fmt"
 	"io"
 	"log/slog"
@@ -37,6 +38,10 @@ type wsMixedItem struct {
 		URL    string `json:"url"`
 		Aeskey string `json:"aeskey"`
 	} `json:"image,omitempty"`
+	File *struct {
+		URL    string `json:"url"`
+		Aeskey string `json:"aeskey"`
+	} `json:"file,omitempty"`
 }
 
 type wsMixedBlock struct {
@@ -97,6 +102,10 @@ func wsCollectInboundParts(body *wsMsgCallbackBody) (texts []string, imgs, files
 				if item.Image != nil {
 					appendImage(item.Image.URL, item.Image.Aeskey)
 				}
+			case "file":
+				if item.File != nil {
+					appendFile(item.File.URL, item.File.Aeskey)
+				}
 			}
 		}
 	}
@@ -138,8 +147,86 @@ func wsCollectInboundParts(body *wsMsgCallbackBody) (texts []string, imgs, files
 			appendFile(body.File.URL, body.File.Aeskey)
 		}
 	}
+	// WeCom may send msgtype=file (or image) together with a non-empty mixed block; the real
+	// download url is then only on the top-level file/image object. Merge those here.
+	if body.Mixed != nil && len(body.Mixed.MsgItem) > 0 {
+		if body.MsgType == "file" && body.File != nil {
+			appendFile(body.File.URL, body.File.Aeskey)
+		}
+		if body.MsgType == "image" && body.Image != nil {
+			appendImage(body.Image.URL, body.Image.Aeskey)
+		}
+	}
 	walkQuote(body.Quote)
 	return texts, imgs, files
+}
+
+// decodeWeComAESKey normalizes and decodes the aeskey from WeCom WS callbacks.
+// The server may send standard Base64, URL-safe Base64 (- _), omit padding, insert
+// whitespace, or (rarely) a 64-char hex string. Node's Buffer.from(s, 'base64') is more
+// permissive than Go's StdEncoding; we mirror common cases so decryption matches the SDK.
+func decodeWeComAESKey(aesKey string) ([]byte, error) {
+	s := strings.TrimSpace(aesKey)
+	if s == "" {
+		return nil, fmt.Errorf("wecom-ws: empty aeskey")
+	}
+	var b strings.Builder
+	b.Grow(len(s))
+	for i := 0; i < len(s); i++ {
+		switch s[i] {
+		case '\n', '\r', ' ', '\t':
+			continue
+		default:
+			b.WriteByte(s[i])
+		}
+	}
+	s = b.String()
+
+	if len(s) == 64 && isHexString(s) {
+		key, err := hex.DecodeString(s)
+		if err != nil {
+			return nil, fmt.Errorf("wecom-ws: decode aeskey hex: %w", err)
+		}
+		if len(key) != 32 {
+			return nil, fmt.Errorf("wecom-ws: aeskey hex length %d, want 32 bytes", len(key))
+		}
+		return key, nil
+	}
+
+	// URL-safe alphabet → standard (RFC 4648 §5)
+	s = strings.ReplaceAll(s, "-", "+")
+	s = strings.ReplaceAll(s, "_", "/")
+
+	switch len(s) % 4 {
+	case 0:
+	case 2:
+		s += "=="
+	case 3:
+		s += "="
+	default:
+		return nil, fmt.Errorf("wecom-ws: invalid aeskey base64 length")
+	}
+
+	key, err := base64.StdEncoding.DecodeString(s)
+	if err != nil {
+		return nil, fmt.Errorf("wecom-ws: decode aeskey: %w", err)
+	}
+	if len(key) < 32 {
+		return nil, fmt.Errorf("wecom-ws: aeskey decoded length %d, need >= 32", len(key))
+	}
+	return key, nil
+}
+
+func isHexString(s string) bool {
+	for i := 0; i < len(s); i++ {
+		c := s[i]
+		switch {
+		case c >= '0' && c <= '9', c >= 'a' && c <= 'f', c >= 'A' && c <= 'F':
+		default:
+			return false
+		}
+	}
+	return true
 }
 
 // wecomDecryptFile decrypts payload from WeCom WS media URLs (AES-256-CBC, IV = first 16 key bytes).
@@ -148,12 +235,9 @@ func wecomDecryptFile(ciphertext []byte, aesKeyB64 string) ([]byte, error) {
 	if len(ciphertext) == 0 {
 		return nil, fmt.Errorf("wecom-ws: empty ciphertext")
 	}
-	key, err := base64.StdEncoding.DecodeString(aesKeyB64)
+	key, err := decodeWeComAESKey(aesKeyB64)
 	if err != nil {
-		return nil, fmt.Errorf("wecom-ws: decode aeskey: %w", err)
-	}
-	if len(key) < 32 {
-		return nil, fmt.Errorf("wecom-ws: aeskey decoded length %d, need >= 32", len(key))
+		return nil, err
 	}
 	key32 := key[:32]
 	iv := key32[:16]
