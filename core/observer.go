@@ -81,6 +81,34 @@ func parseObservationLine(line []byte) *observation {
 	}
 }
 
+// startObserver launches the terminal session observer if configured.
+// Called from Engine.Start() after platforms are ready.
+func (e *Engine) startObserver() {
+	if !e.observeEnabled || e.observeProjectDir == "" {
+		return
+	}
+
+	target := e.findObserverTarget()
+	if target == nil {
+		slog.Warn("observe: no platform supports observation; --observe ignored")
+		return
+	}
+
+	channelID := extractChannelID(e.observeSessionKey)
+	if channelID == "" {
+		slog.Warn("observe: could not extract channel ID from session key", "key", e.observeSessionKey)
+		return
+	}
+
+	ctx, cancel := context.WithCancel(e.ctx)
+	e.observeCancel = cancel
+
+	obs := newSessionObserver(e.observeProjectDir, target, channelID)
+	go obs.run(ctx)
+
+	slog.Info("observe: watching terminal sessions", "dir", e.observeProjectDir, "channel", channelID)
+}
+
 // sessionObserver watches Claude Code JSONL session logs and forwards
 // user/assistant messages to an ObserverTarget (e.g. Slack).
 type sessionObserver struct {
