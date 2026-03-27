@@ -100,7 +100,6 @@ func main() {
 	observeChannel := flag.String("observe-channel", "", "Slack channel ID to forward terminal observations to (requires --observe)")
 	flag.Usage = printUsage
 	flag.Parse()
-	_, _ = observeFlag, observeChannel // TODO(observe): wire in a later task
 
 	if *showVersion {
 		fmt.Printf("cc-connect %s\ncommit:  %s\nbuilt:   %s\n", version, commit, buildTime)
@@ -225,6 +224,32 @@ func main() {
 			bindingStore := filepath.Join(cfg.DataDir, "workspace_bindings.json")
 			engine.SetMultiWorkspace(baseDir, bindingStore)
 			slog.Info("multi-workspace mode enabled", "project", proj.Name, "base_dir", baseDir)
+		}
+
+		// Wire terminal observation (--observe)
+		if *observeFlag {
+			if *observeChannel == "" {
+				slog.Error("--observe requires --observe-channel <Slack channel ID>")
+				os.Exit(1)
+			}
+			hasSlack := false
+			for _, p := range platforms {
+				if p.Name() == "slack" {
+					hasSlack = true
+					break
+				}
+			}
+			if !hasSlack {
+				slog.Warn("--observe requires a Slack platform; ignoring flag")
+			} else {
+				projectDir := resolveClaudeProjectDir(workDir)
+				if projectDir == "" {
+					slog.Warn("--observe: could not find Claude Code project directory", "workDir", workDir)
+				} else {
+					sessionKey := fmt.Sprintf("slack:%s", *observeChannel)
+					engine.SetObserveConfig(projectDir, sessionKey)
+				}
+			}
 		}
 
 		// Wire global custom commands
@@ -987,6 +1012,23 @@ func applyProjectStateOverride(projectName string, agent core.Agent, configuredW
 	switcher.SetWorkDir(override)
 	slog.Info("project_state: applied work_dir override", "project", projectName, "work_dir", override)
 	return override
+}
+
+// resolveClaudeProjectDir returns the Claude Code project directory for a given
+// work directory, or "" if it doesn't exist.
+func resolveClaudeProjectDir(workDir string) string {
+	homeDir, err := os.UserHomeDir()
+	if err != nil {
+		return ""
+	}
+	// Claude Code encodes paths by replacing os.PathSeparator with "-"
+	// e.g. /home/leigh/workspace/cc-connect -> -home-leigh-workspace-cc-connect
+	encoded := strings.ReplaceAll(workDir, string(os.PathSeparator), "-")
+	dir := filepath.Join(homeDir, ".claude", "projects", encoded)
+	if info, err := os.Stat(dir); err != nil || !info.IsDir() {
+		return ""
+	}
+	return dir
 }
 
 // resolveConfigPath determines which config file to use.
