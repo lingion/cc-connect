@@ -12,6 +12,7 @@ import (
 	"strings"
 	"sync"
 	"time"
+	"unicode/utf8"
 )
 
 // ObserverTarget is an optional interface that platforms can implement to receive
@@ -211,10 +212,8 @@ func (o *sessionObserver) tailFile(ctx context.Context, path string, offset int6
 	scanner := bufio.NewScanner(f)
 	scanner.Buffer(make([]byte, 0, 64*1024), 1*1024*1024)
 
-	var lastPos int64 = offset
 	for scanner.Scan() {
 		line := scanner.Bytes()
-		lastPos += int64(len(line)) + 1 // +1 for newline
 
 		obs := parseObservationLine(line)
 		if obs == nil || obs.text == "" {
@@ -224,7 +223,12 @@ func (o *sessionObserver) tailFile(ctx context.Context, path string, offset int6
 		o.forward(ctx, obs)
 	}
 
-	return lastPos
+	// Use file size as new offset when we've read to EOF cleanly.
+	// This avoids offset drift from line-length calculation (e.g. \r\n vs \n).
+	if scanner.Err() == nil {
+		return info.Size()
+	}
+	return offset
 }
 
 // forward sends a parsed observation to the target platform.
@@ -242,7 +246,12 @@ func (o *sessionObserver) forward(ctx context.Context, obs *observation) {
 	// Slack has a 4000 char limit per message; truncate if needed
 	const maxLen = 3900
 	if len(msg) > maxLen {
-		msg = msg[:maxLen] + "\n... (truncated)"
+		truncated := msg[:maxLen]
+		// Ensure we don't cut mid-rune
+		for len(truncated) > 0 && !utf8.ValidString(truncated) {
+			truncated = truncated[:len(truncated)-1]
+		}
+		msg = truncated + "\n... (truncated)"
 	}
 
 	if err := o.target.SendObservation(ctx, o.channelID, msg); err != nil {
