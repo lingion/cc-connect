@@ -226,10 +226,20 @@ func main() {
 			slog.Info("multi-workspace mode enabled", "project", proj.Name, "base_dir", baseDir)
 		}
 
-		// Wire terminal observation (--observe)
-		if *observeFlag {
-			if *observeChannel == "" {
-				slog.Error("--observe requires --observe-channel <Slack channel ID>")
+		// Wire terminal observation (--observe / [projects.observe])
+		observeEnabled := *observeFlag
+		obsChan := *observeChannel
+		if proj.Observe != nil {
+			if !observeEnabled && proj.Observe.Enabled {
+				observeEnabled = true
+			}
+			if obsChan == "" && proj.Observe.Channel != "" {
+				obsChan = proj.Observe.Channel
+			}
+		}
+		if observeEnabled {
+			if obsChan == "" {
+				slog.Error("observe: channel is required (use --observe-channel or set channel in [projects.observe])")
 				os.Exit(1)
 			}
 			hasSlack := false
@@ -240,13 +250,13 @@ func main() {
 				}
 			}
 			if !hasSlack {
-				slog.Warn("--observe requires a Slack platform; ignoring flag")
+				slog.Warn("observe requires a Slack platform; ignoring")
 			} else {
 				projectDir := resolveClaudeProjectDir(workDir)
 				if projectDir == "" {
-					slog.Warn("--observe: could not find Claude Code project directory", "workDir", workDir)
+					slog.Warn("observe: could not find Claude Code project directory", "workDir", workDir)
 				} else {
-					sessionKey := fmt.Sprintf("slack:%s", *observeChannel)
+					sessionKey := fmt.Sprintf("slack:%s", obsChan)
 					engine.SetObserveConfig(projectDir, sessionKey)
 				}
 			}

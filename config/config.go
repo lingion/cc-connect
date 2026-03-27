@@ -189,6 +189,12 @@ type AutoCompressConfig struct {
 	MinGapMins *int  `toml:"min_gap_mins,omitempty"` // minimum minutes between auto-compress runs (default 30)
 }
 
+// ObserveConfig controls forwarding of native terminal Claude Code sessions to a messaging platform.
+type ObserveConfig struct {
+	Enabled bool   `toml:"enabled"`
+	Channel string `toml:"channel"`
+}
+
 // ProjectConfig binds one agent (with a specific work_dir) to one or more platforms.
 type ProjectConfig struct {
 	Name         string             `toml:"name"`
@@ -203,12 +209,13 @@ type ProjectConfig struct {
 	// 0 or nil disables the behavior.
 	ResetOnIdleMins *int `toml:"reset_on_idle_mins,omitempty"`
 	// ShowContextIndicator: nil/true = append [ctx: ~N%] to assistant replies; false = hide.
-	ShowContextIndicator *bool        `toml:"show_context_indicator,omitempty"`
-	Quiet                *bool        `toml:"quiet,omitempty"`             // project-level quiet mode; overrides global setting
-	InjectSender         *bool        `toml:"inject_sender,omitempty"`     // prepend sender identity (platform + user ID) to each message sent to the agent
-	DisabledCommands     []string     `toml:"disabled_commands,omitempty"` // commands to disable for this project (e.g. ["restart", "upgrade"])
-	AdminFrom            string       `toml:"admin_from,omitempty"`        // comma-separated user IDs allowed to run privileged commands; "*" = all allowed users
-	Users                *UsersConfig `toml:"users,omitempty"`             // per-user role config; nil = legacy behavior
+	ShowContextIndicator *bool          `toml:"show_context_indicator,omitempty"`
+	Quiet                *bool          `toml:"quiet,omitempty"`             // project-level quiet mode; overrides global setting
+	InjectSender         *bool          `toml:"inject_sender,omitempty"`     // prepend sender identity (platform + user ID) to each message sent to the agent
+	DisabledCommands     []string       `toml:"disabled_commands,omitempty"` // commands to disable for this project (e.g. ["restart", "upgrade"])
+	AdminFrom            string         `toml:"admin_from,omitempty"`        // comma-separated user IDs allowed to run privileged commands; "*" = all allowed users
+	Users                *UsersConfig   `toml:"users,omitempty"`             // per-user role config; nil = legacy behavior
+	Observe              *ObserveConfig `toml:"observe,omitempty"`
 }
 
 type AgentConfig struct {
