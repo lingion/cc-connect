@@ -50,10 +50,16 @@ func TestBuildSpawnCommand_RunAsUser(t *testing.T) {
 	// Allowlist must include both defaults and the extensions, sorted+deduped.
 	preserveList := strings.TrimPrefix(cmd.Args[4], "--preserve-env=")
 	preserved := strings.Split(preserveList, ",")
-	for _, needed := range []string{"PATH", "LANG", "LC_ALL", "TERM", "PGSSLROOTCERT", "PGSSLMODE"} {
+	for _, needed := range []string{"LANG", "LC_ALL", "TERM", "PGSSLROOTCERT", "PGSSLMODE"} {
 		if !slices.Contains(preserved, needed) {
 			t.Errorf("preserve-env missing %q; got %v", needed, preserved)
 		}
+	}
+	// PATH must NOT be in the allowlist — sudo -i rebuilds it from the
+	// target user's login profile, and preserving the supervisor's PATH
+	// would leak supervisor work dirs into the isolated session.
+	if slices.Contains(preserved, "PATH") {
+		t.Errorf("preserve-env leaked PATH; got %v", preserved)
 	}
 	if cmd.Args[5] != "--" {
 		t.Fatalf("args[5] = %q, want --", cmd.Args[5])
@@ -88,9 +94,11 @@ func TestFilterEnvForSpawn_RunAsUser(t *testing.T) {
 		EnvAllowlist: []string{"PGSSLROOTCERT"},
 	}
 	got := FilterEnvForSpawn(env, opts)
-	// PATH, LANG, PGSSLROOTCERT should survive; SECRET, HOME, SUPERVISOR_CREDENTIAL must not.
+	// LANG, PGSSLROOTCERT should survive; PATH, SECRET, HOME,
+	// SUPERVISOR_CREDENTIAL must not. PATH is deliberately dropped so
+	// sudo -i can rebuild it from the target user's login profile
+	// instead of inheriting the supervisor's PATH.
 	wantKept := map[string]bool{
-		"PATH=/usr/bin":                    true,
 		"LANG=en_US.UTF-8":                 true,
 		"PGSSLROOTCERT=/etc/certs/root.crt": true,
 	}
@@ -104,7 +112,7 @@ func TestFilterEnvForSpawn_RunAsUser(t *testing.T) {
 		t.Errorf("expected env missing after filter: %q", e)
 	}
 	for _, e := range got {
-		if strings.HasPrefix(e, "SECRET=") || strings.HasPrefix(e, "HOME=") || strings.HasPrefix(e, "SUPERVISOR_CREDENTIAL=") {
+		if strings.HasPrefix(e, "PATH=") || strings.HasPrefix(e, "SECRET=") || strings.HasPrefix(e, "HOME=") || strings.HasPrefix(e, "SUPERVISOR_CREDENTIAL=") {
 			t.Errorf("disallowed env leaked: %q", e)
 		}
 	}

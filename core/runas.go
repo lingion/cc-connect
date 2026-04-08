@@ -77,10 +77,18 @@ func currentUsername() string {
 }
 
 // DefaultEnvAllowlist is the minimal env preserved across the sudo
-// boundary. Deliberately excluded: HOME / USER / LOGNAME / SHELL
-// (sudo -i overrides them), PWD (set by cmd.Dir), anything secret.
+// boundary. Deliberately excluded:
+//   - HOME / USER / LOGNAME / SHELL — sudo -i overrides them
+//   - PWD — set by cmd.Dir
+//   - PATH — sudo -i builds it from the target user's /etc/profile +
+//     ~/.profile. Preserving the supervisor's PATH would (a) leak
+//     supervisor work directories into the isolated session and
+//     (b) defeat the whole point of -i by overriding the login shell's
+//     PATH. If the target user needs specific binaries on PATH, put
+//     them in the system PATH (e.g. /usr/local/bin symlinks) or in
+//     the target user's own shell profile.
+//   - anything secret
 var DefaultEnvAllowlist = []string{
-	"PATH",
 	"LANG",
 	"LC_ALL",
 	"LC_CTYPE",
