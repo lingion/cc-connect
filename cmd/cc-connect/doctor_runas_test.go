@@ -17,15 +17,8 @@ func TestDefaultAuditDir_HomeSuffix(t *testing.T) {
 	}
 }
 
-// captureStdout swaps os.Stdout for the duration of fn and returns the
-// captured output.
-func TestPrintHumanReport_DoesNotPanic(t *testing.T) {
-	// Build a populated report with a cross-user leak to exercise the
-	// fatal path.
-	r := core.IsolationReport{
-		Project:   "demo",
-		RunAsUser: "coder",
-	}
+func TestWriteHumanReport_RendersAllSections(t *testing.T) {
+	r := core.IsolationReport{Project: "demo", RunAsUser: "coder"}
 	r.Identity.Whoami = "coder"
 	r.Identity.ID = "uid=1001(coder)"
 	r.Identity.Home = "/home/coder"
@@ -41,6 +34,12 @@ func TestPrintHumanReport_DoesNotPanic(t *testing.T) {
 	}
 	r.Fatal = []string{"cross-user leak"}
 
-	// Just make sure it doesn't panic and touches all branches.
-	printHumanReport(r)
+	var out strings.Builder
+	writeHumanReport(&out, r)
+	s := out.String()
+	for _, want := range []string{"whoami", "workdir", "target home", "cross-user", "LEAKED", "FATAL"} {
+		if !strings.Contains(s, want) {
+			t.Errorf("report missing %q:\n%s", want, s)
+		}
+	}
 }

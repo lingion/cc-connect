@@ -27,40 +27,23 @@ import (
 	"time"
 )
 
-// PreflightResult captures the outcome of running the full preflight suite
-// for a single project.
+// PreflightResult is the outcome of PreflightRunAsUser for one project.
 type PreflightResult struct {
-	// Project is the config project name, used in log output.
-	Project string
-	// RunAsUser is the target user the checks were run for.
+	Project   string
 	RunAsUser string
-	// Fatal errors, if any, mean cc-connect must not start this project.
-	// If any project has any fatal, cc-connect aborts startup globally.
-	Fatal []error
-	// Warnings are non-fatal observations (e.g. descendant paths in
-	// work_dir that the target user cannot read). They are logged but do
-	// not block startup.
-	Warnings []string
-	// SudoListOutput captures `sudo -n -l` output collected when check 2
-	// (target cannot escalate) fails, to help the operator find the
-	// offending sudoers rule.
+	Fatal     []error
+	Warnings  []string
+	// SudoListOutput is captured from `sudo -n -l` when check 2 fails,
+	// so the fatal message can point at the offending sudoers rule.
 	SudoListOutput string
 }
 
-// HasFatal reports whether at least one fatal error was recorded.
 func (r PreflightResult) HasFatal() bool { return len(r.Fatal) > 0 }
 
-// DescendantScanConfig tunes the non-fatal work_dir descendant scan.
 type DescendantScanConfig struct {
-	// PrunePaths are directory basenames that are skipped during the
-	// walk. Typical values: .git, node_modules, .venv.
 	PrunePaths []string
-	// MaxReport caps the number of individual path warnings printed
-	// before summarizing the remainder as a count.
-	MaxReport int
-	// Timeout bounds the entire scan. If it elapses, the scan returns a
-	// single "scan timed out" warning rather than partial results.
-	Timeout time.Duration
+	MaxReport  int
+	Timeout    time.Duration
 }
 
 // DefaultDescendantScanConfig is the baseline used unless a caller
@@ -74,8 +57,6 @@ var DefaultDescendantScanConfig = DescendantScanConfig{
 	Timeout:   10 * time.Second,
 }
 
-// PreflightConfig bundles the inputs to PreflightRunAsUser so callers can
-// pass a single struct rather than a long argument list.
 type PreflightConfig struct {
 	Project    string
 	RunAsUser  string
@@ -111,7 +92,6 @@ func PreflightRunAsUser(ctx context.Context, cfg PreflightConfig) PreflightResul
 		cfg.ScanConfig = DefaultDescendantScanConfig
 	}
 
-	// Check 1: passwordless sudo to target works.
 	if _, err := cfg.Runner.Run(ctx, "-n", "-iu", cfg.RunAsUser, "--", "/bin/true"); err != nil {
 		result.Fatal = append(result.Fatal, fmt.Errorf(
 			"project %q: passwordless sudo to user %q is not configured. Add a sudoers rule such as:\n  %s ALL=(%s) NOPASSWD: ALL\nthen restart cc-connect. Underlying error: %w",
@@ -119,10 +99,9 @@ func PreflightRunAsUser(ctx context.Context, cfg PreflightConfig) PreflightResul
 		return result // subsequent checks are pointless
 	}
 
-	// Check 2: target cannot escalate via sudo. Expected: command FAILS.
 	if _, err := cfg.Runner.Run(ctx, "-n", "-iu", cfg.RunAsUser, "--", "sudo", "-n", "/bin/true"); err == nil {
-		// Escalation succeeded — this is the failure case.
-		// Collect sudo -l from the target's context for the error message.
+		// Escalation succeeded — collect sudo -l from the target's
+		// context to help the operator find the offending rule.
 		if out, listErr := cfg.Runner.Run(ctx, "-n", "-iu", cfg.RunAsUser, "--", "sudo", "-n", "-l"); listErr == nil {
 			result.SudoListOutput = strings.TrimSpace(string(out))
 		}
@@ -133,11 +112,10 @@ func PreflightRunAsUser(ctx context.Context, cfg PreflightConfig) PreflightResul
 			msg += "\n\n`sudo -n -l` as " + cfg.RunAsUser + ":\n" + indent(result.SudoListOutput, "  ")
 		}
 		result.Fatal = append(result.Fatal, errors.New(msg))
-		// Don't return early — still run check 3 so the operator gets all
+		// Don't return — still run check 3 so the operator gets all
 		// the bad news in a single startup attempt.
 	}
 
-	// Check 3a (fatal): target user can read and write work_dir root.
 	if cfg.WorkDir == "" {
 		result.Warnings = append(result.Warnings, fmt.Sprintf(
 			"project %q: no work_dir configured; skipping filesystem access checks", cfg.Project))
@@ -151,8 +129,6 @@ func PreflightRunAsUser(ctx context.Context, cfg PreflightConfig) PreflightResul
 				"project %q: target user %q cannot read AND write work_dir %q. Agents will fail with EACCES at runtime. Fix ownership/permissions on this directory (chown/chmod or an ACL granting the target user rwx) before starting cc-connect.",
 				cfg.Project, cfg.RunAsUser, absWorkDir))
 		} else {
-			// Check 3b (warning-only): walk descendants, collect paths
-			// the target user cannot read/write. Runs with a timeout.
 			warn := scanDescendants(ctx, cfg.Runner, cfg.RunAsUser, absWorkDir, cfg.ScanConfig)
 			if warn != "" {
 				result.Warnings = append(result.Warnings, warn)
@@ -163,24 +139,14 @@ func PreflightRunAsUser(ctx context.Context, cfg PreflightConfig) PreflightResul
 	return result
 }
 
-// scanDescendants runs a best-effort `find` as the target user under
-// workDir and formats any access problems as a single warning string. It
-// returns "" if no issues are found. Respects ScanConfig.Timeout.
+// scanDescendants runs find as the target user under workDir and
+// returns a formatted warning string, or "" if nothing is flagged.
+// Respects ScanConfig.Timeout. Output format per line is
+// "MODE<TAB>PATH" where MODE is noread / nowrite / nosearch.
 func scanDescendants(ctx context.Context, runner SudoRunner, target, workDir string, scan DescendantScanConfig) string {
 	scanCtx, cancel := context.WithTimeout(ctx, scan.Timeout)
 	defer cancel()
 
-	// Build a find expression that:
-	//   - prunes noisy directories (-path .../name -prune -o ...)
-	//   - prints only entries that the current user CANNOT read, cannot
-	//     write, or (for dirs) cannot search.
-	//
-	// Using find's own permission tests means the check runs inside the
-	// target user's context (because we invoke find via sudo -iu), so we
-	// get the real answer without shelling out per-file.
-	//
-	// Output format per line: "MODE<TAB>PATH" where MODE is one of
-	// "noread", "nowrite", "nosearch".
 	var prune []string
 	for _, p := range scan.PrunePaths {
 		if len(prune) > 0 {
@@ -212,8 +178,8 @@ func scanDescendants(ctx context.Context, runner SudoRunner, target, workDir str
 	if scanCtx.Err() == context.DeadlineExceeded {
 		return fmt.Sprintf("work_dir descendant scan timed out after %s (large repo?); skipping detailed access audit. Run `cc-connect doctor user-isolation` manually if you need it.", scan.Timeout)
 	}
-	// find exits non-zero if it couldn't stat some path. That's actually
-	// data for us; we still parse whatever it printed.
+	// find exits non-zero if it couldn't stat some path — that's
+	// actually data for us, parse whatever it printed.
 	_ = err
 
 	lines := strings.Split(strings.TrimSpace(string(out)), "\n")
@@ -221,7 +187,6 @@ func scanDescendants(ctx context.Context, runner SudoRunner, target, workDir str
 		return ""
 	}
 
-	// Dedupe + sort for stable output.
 	seen := make(map[string]struct{}, len(lines))
 	var uniq []string
 	for _, l := range lines {
@@ -256,8 +221,6 @@ func scanDescendants(ctx context.Context, runner SudoRunner, target, workDir str
 	return b.String()
 }
 
-// currentUsernameOr returns the current Unix username or a fallback. Used
-// purely for building the example sudoers line in error messages.
 func currentUsernameOr(fallback string) string {
 	if u := currentUsername(); u != "" {
 		return u

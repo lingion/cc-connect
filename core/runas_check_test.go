@@ -5,6 +5,7 @@ package core
 import (
 	"context"
 	"os/exec"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -191,7 +192,7 @@ func TestPreflightRunAsUser_DescendantWarningsCapped(t *testing.T) {
 	var sb strings.Builder
 	for i := 0; i < 75; i++ {
 		sb.WriteString("noread\t/tmp/wd/file")
-		sb.WriteString(itoa(i))
+		sb.WriteString(strconv.Itoa(i))
 		sb.WriteByte('\n')
 	}
 	findArgs := []string{
@@ -226,14 +227,3 @@ func TestPreflightRunAsUser_DescendantWarningsCapped(t *testing.T) {
 	}
 }
 
-func itoa(n int) string {
-	if n == 0 {
-		return "0"
-	}
-	var out []byte
-	for n > 0 {
-		out = append([]byte{byte('0' + n%10)}, out...)
-		n /= 10
-	}
-	return string(out)
-}

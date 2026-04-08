@@ -9,6 +9,8 @@ import (
 	"os/user"
 	"path/filepath"
 	"runtime"
+	"strings"
+	"sync"
 	"time"
 
 	"github.com/chenhg5/cc-connect/config"
@@ -104,99 +106,125 @@ func runDoctorUserIsolation(args []string) {
 	}
 
 	runner := core.ExecSudoRunner{}
-	exitCode := 0
-	for _, t := range targets {
-		fmt.Printf("=== %s (run_as_user = %s) ===\n", t.project, t.runAsUser)
 
-		// Preflight.
-		pfCtx, pfCancel := context.WithTimeout(context.Background(), 30*time.Second)
-		pf := core.PreflightRunAsUser(pfCtx, core.PreflightConfig{
-			Project:   t.project,
-			RunAsUser: t.runAsUser,
-			WorkDir:   t.workDir,
-			Runner:    runner,
-		})
-		pfCancel()
-
-		for _, w := range pf.Warnings {
-			fmt.Printf("[WARN] %s\n", w)
-		}
-		for _, f := range pf.Fatal {
-			fmt.Printf("[FATAL] %s\n", f)
-		}
-		if pf.HasFatal() {
-			exitCode = 1
-			fmt.Println()
-			continue
-		}
-		fmt.Println("preflight: OK")
-
-		// Audit probe.
-		audCtx, audCancel := context.WithTimeout(context.Background(), 20*time.Second)
-		report, err := core.RunIsolationProbe(audCtx, core.AuditConfig{
-			Project:    t.project,
-			RunAsUser:  t.runAsUser,
-			WorkDir:    t.workDir,
-			OtherUsers: allUsers,
-			Supervisor: supervisor,
-			Runner:     runner,
-		})
-		audCancel()
-		if err != nil {
-			fmt.Printf("[FATAL] probe failed to run: %v\n", err)
-			exitCode = 1
-			fmt.Println()
-			continue
-		}
-
-		printHumanReport(report)
-
-		// Write JSON report.
-		dest := *outPath
-		if dest == "" {
-			dir, derr := defaultAuditDir()
-			if derr != nil {
-				fmt.Fprintf(os.Stderr, "could not determine audit output dir: %v\n", derr)
-				exitCode = 1
-				continue
-			}
-			if err := os.MkdirAll(dir, 0o755); err != nil {
-				fmt.Fprintf(os.Stderr, "could not create audit dir %s: %v\n", dir, err)
-				exitCode = 1
-				continue
-			}
-			ts := report.Timestamp.Format("20060102-150405")
-			dest = filepath.Join(dir, fmt.Sprintf("%s-%s.json", ts, t.project))
-		}
-		data, err := json.MarshalIndent(report, "", "  ")
-		if err != nil {
-			fmt.Fprintf(os.Stderr, "JSON marshal failed: %v\n", err)
-			exitCode = 1
-			continue
-		}
-		if err := os.WriteFile(dest, data, 0o600); err != nil {
-			fmt.Fprintf(os.Stderr, "writing %s: %v\n", dest, err)
-			exitCode = 1
-			continue
-		}
-		fmt.Printf("report written: %s\n", dest)
-
-		if report.HasFatal() {
-			exitCode = 1
-		}
-		fmt.Println()
+	// Fan out preflight + audit per project in parallel. Each project
+	// accumulates its own buffered output so the final stdout stays
+	// grouped per project instead of interleaving.
+	type result struct {
+		project    string
+		runAsUser  string
+		output     strings.Builder
+		exitFailed bool
 	}
+	results := make([]*result, len(targets))
+	var wg sync.WaitGroup
+	for i, t := range targets {
+		i, t := i, t
+		r := &result{project: t.project, runAsUser: t.runAsUser}
+		results[i] = r
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			runDoctorOne(context.Background(), runner, t.project, t.runAsUser, t.workDir, allUsers, supervisor, *outPath, &r.output, &r.exitFailed)
+		}()
+	}
+	wg.Wait()
 
+	exitCode := 0
+	for _, r := range results {
+		fmt.Printf("=== %s (run_as_user = %s) ===\n", r.project, r.runAsUser)
+		os.Stdout.WriteString(r.output.String())
+		fmt.Println()
+		if r.exitFailed {
+			exitCode = 1
+		}
+	}
 	os.Exit(exitCode)
 }
 
-// printHumanReport dumps a compact human-friendly summary of an audit to
-// stdout. The JSON file is the authoritative record; this is for eyeballs.
-func printHumanReport(r core.IsolationReport) {
-	fmt.Printf("whoami         : %s\n", r.Identity.Whoami)
-	fmt.Printf("id             : %s\n", r.Identity.ID)
-	fmt.Printf("home           : %s\n", r.Identity.Home)
-	fmt.Printf("workdir        : %s (readable=%v writable=%v)\n",
+// runDoctorOne runs preflight + audit for a single project and writes the
+// human-readable output into out. Sets *failed to true on any fatal.
+func runDoctorOne(ctx context.Context, runner core.SudoRunner, project, runAsUser, workDir string, otherUsers []string, supervisor, outPathOverride string, out *strings.Builder, failed *bool) {
+	pfCtx, pfCancel := context.WithTimeout(ctx, 30*time.Second)
+	pf := core.PreflightRunAsUser(pfCtx, core.PreflightConfig{
+		Project:   project,
+		RunAsUser: runAsUser,
+		WorkDir:   workDir,
+		Runner:    runner,
+	})
+	pfCancel()
+
+	for _, w := range pf.Warnings {
+		fmt.Fprintf(out, "[WARN] %s\n", w)
+	}
+	for _, f := range pf.Fatal {
+		fmt.Fprintf(out, "[FATAL] %s\n", f)
+	}
+	if pf.HasFatal() {
+		*failed = true
+		return
+	}
+	fmt.Fprintln(out, "preflight: OK")
+
+	audCtx, audCancel := context.WithTimeout(ctx, 20*time.Second)
+	report, err := core.RunIsolationProbe(audCtx, core.AuditConfig{
+		Project:    project,
+		RunAsUser:  runAsUser,
+		WorkDir:    workDir,
+		OtherUsers: otherUsers,
+		Supervisor: supervisor,
+		Runner:     runner,
+	})
+	audCancel()
+	if err != nil {
+		fmt.Fprintf(out, "[FATAL] probe failed to run: %v\n", err)
+		*failed = true
+		return
+	}
+
+	writeHumanReport(out, report)
+
+	dest := outPathOverride
+	if dest == "" {
+		dir, derr := defaultAuditDir()
+		if derr != nil {
+			fmt.Fprintf(out, "could not determine audit output dir: %v\n", derr)
+			*failed = true
+			return
+		}
+		if err := os.MkdirAll(dir, 0o755); err != nil {
+			fmt.Fprintf(out, "could not create audit dir %s: %v\n", dir, err)
+			*failed = true
+			return
+		}
+		ts := report.Timestamp.Format("20060102-150405")
+		dest = filepath.Join(dir, fmt.Sprintf("%s-%s.json", ts, project))
+	}
+	data, err := json.MarshalIndent(report, "", "  ")
+	if err != nil {
+		fmt.Fprintf(out, "JSON marshal failed: %v\n", err)
+		*failed = true
+		return
+	}
+	if err := os.WriteFile(dest, data, 0o600); err != nil {
+		fmt.Fprintf(out, "writing %s: %v\n", dest, err)
+		*failed = true
+		return
+	}
+	fmt.Fprintf(out, "report written: %s\n", dest)
+
+	if report.HasFatal() {
+		*failed = true
+	}
+}
+
+// writeHumanReport writes a compact human summary of an audit to w. The
+// JSON file is the authoritative record; this is for eyeballs.
+func writeHumanReport(w *strings.Builder, r core.IsolationReport) {
+	fmt.Fprintf(w, "whoami         : %s\n", r.Identity.Whoami)
+	fmt.Fprintf(w, "id             : %s\n", r.Identity.ID)
+	fmt.Fprintf(w, "home           : %s\n", r.Identity.Home)
+	fmt.Fprintf(w, "workdir        : %s (readable=%v writable=%v)\n",
 		r.WorkDirStatus.Path, r.WorkDirStatus.Readable, r.WorkDirStatus.Writable)
 
 	hasCount, missCount := 0, 0
@@ -207,12 +235,10 @@ func printHumanReport(r core.IsolationReport) {
 			missCount++
 		}
 	}
-	fmt.Printf("target home    : %d present, %d missing\n", hasCount, missCount)
-	if missCount > 0 {
-		for _, p := range r.TargetPaths {
-			if p.Status == "missing" {
-				fmt.Printf("  missing: %s\n", p.Path)
-			}
+	fmt.Fprintf(w, "target home    : %d present, %d missing\n", hasCount, missCount)
+	for _, p := range r.TargetPaths {
+		if p.Status == "missing" {
+			fmt.Fprintf(w, "  missing: %s\n", p.Path)
 		}
 	}
 
@@ -225,10 +251,10 @@ func printHumanReport(r core.IsolationReport) {
 			leaked++
 		}
 	}
-	fmt.Printf("cross-user     : %d denied, %d leaked\n", denied, leaked)
+	fmt.Fprintf(w, "cross-user     : %d denied, %d leaked\n", denied, leaked)
 	for _, c := range r.CrossUser {
 		if c.Status == "leaked" {
-			fmt.Printf("  LEAKED: %s can read %s (%s)\n", r.RunAsUser, c.Path, c.OtherUser)
+			fmt.Fprintf(w, "  LEAKED: %s can read %s (%s)\n", r.RunAsUser, c.Path, c.OtherUser)
 		}
 	}
 
@@ -241,20 +267,20 @@ func printHumanReport(r core.IsolationReport) {
 			supLeaked++
 		}
 	}
-	fmt.Printf("supervisor     : %d denied, %d leaked\n", supDenied, supLeaked)
+	fmt.Fprintf(w, "supervisor     : %d denied, %d leaked\n", supDenied, supLeaked)
 	for _, s := range r.Supervisor {
 		if s.Status == "leaked" {
-			fmt.Printf("  LEAKED: %s can read supervisor's %s\n", r.RunAsUser, s.Path)
+			fmt.Fprintf(w, "  LEAKED: %s can read supervisor's %s\n", r.RunAsUser, s.Path)
 		}
 	}
 
 	if r.HasFatal() {
-		fmt.Println("audit          : FATAL")
+		fmt.Fprintln(w, "audit          : FATAL")
 		for _, f := range r.Fatal {
-			fmt.Printf("  %s\n", f)
+			fmt.Fprintf(w, "  %s\n", f)
 		}
 	} else {
-		fmt.Println("audit          : OK")
+		fmt.Fprintln(w, "audit          : OK")
 	}
 }
 

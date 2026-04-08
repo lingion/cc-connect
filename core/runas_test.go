@@ -7,6 +7,7 @@ import (
 	"errors"
 	"os/exec"
 	"reflect"
+	"slices"
 	"strings"
 	"testing"
 )
@@ -50,7 +51,7 @@ func TestBuildSpawnCommand_RunAsUser(t *testing.T) {
 	preserveList := strings.TrimPrefix(cmd.Args[4], "--preserve-env=")
 	preserved := strings.Split(preserveList, ",")
 	for _, needed := range []string{"PATH", "LANG", "LC_ALL", "TERM", "PGSSLROOTCERT", "PGSSLMODE"} {
-		if !contains(preserved, needed) {
+		if !slices.Contains(preserved, needed) {
 			t.Errorf("preserve-env missing %q; got %v", needed, preserved)
 		}
 	}
@@ -134,6 +135,7 @@ func (s *stubSudoRunner) Run(_ context.Context, args ...string) ([]byte, error) 
 func key(args ...string) string { return strings.Join(args, "\x1f") }
 
 func TestVerifyRunAsUserCheap_Success(t *testing.T) {
+	ResetVerifyCache()
 	runner := &stubSudoRunner{
 		script: map[string]stubResponse{
 			key("-n", "-iu", "target", "--", "/bin/true"):                           {nil, nil},
@@ -149,6 +151,7 @@ func TestVerifyRunAsUserCheap_Success(t *testing.T) {
 }
 
 func TestVerifyRunAsUserCheap_NoPasswordlessSudoToTarget(t *testing.T) {
+	ResetVerifyCache()
 	runner := &stubSudoRunner{
 		script: map[string]stubResponse{
 			key("-n", "-iu", "target", "--", "/bin/true"): {[]byte("a password is required"), &exec.ExitError{}},
@@ -164,6 +167,7 @@ func TestVerifyRunAsUserCheap_NoPasswordlessSudoToTarget(t *testing.T) {
 }
 
 func TestVerifyRunAsUserCheap_TargetCanEscalate(t *testing.T) {
+	ResetVerifyCache()
 	runner := &stubSudoRunner{
 		script: map[string]stubResponse{
 			key("-n", "-iu", "target", "--", "/bin/true"):               {nil, nil},
@@ -180,17 +184,34 @@ func TestVerifyRunAsUserCheap_TargetCanEscalate(t *testing.T) {
 }
 
 func TestVerifyRunAsUserCheap_EmptyUser(t *testing.T) {
+	ResetVerifyCache()
 	runner := &stubSudoRunner{script: map[string]stubResponse{}}
 	if err := VerifyRunAsUserCheap(context.Background(), runner, ""); err == nil {
 		t.Fatal("want error for empty user")
 	}
 }
 
-func contains(haystack []string, needle string) bool {
-	for _, h := range haystack {
-		if h == needle {
-			return true
-		}
+func TestVerifyRunAsUserCheap_CacheHit(t *testing.T) {
+	ResetVerifyCache()
+	runner := &stubSudoRunner{
+		script: map[string]stubResponse{
+			key("-n", "-iu", "target", "--", "/bin/true"):               {nil, nil},
+			key("-n", "-iu", "target", "--", "sudo", "-n", "/bin/true"): {nil, &exec.ExitError{}},
+		},
 	}
-	return false
+	// First call populates the cache with 2 runner calls.
+	if err := VerifyRunAsUserCheap(context.Background(), runner, "target"); err != nil {
+		t.Fatalf("first call: %v", err)
+	}
+	if len(runner.calls) != 2 {
+		t.Fatalf("first call: want 2 runner calls, got %d", len(runner.calls))
+	}
+	// Second call should be served from the cache — zero new runner calls.
+	if err := VerifyRunAsUserCheap(context.Background(), runner, "target"); err != nil {
+		t.Fatalf("second call: %v", err)
+	}
+	if len(runner.calls) != 2 {
+		t.Fatalf("cached call made runner calls; want 2 total, got %d", len(runner.calls))
+	}
 }
+

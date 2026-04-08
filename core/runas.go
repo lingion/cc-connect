@@ -58,20 +58,27 @@ import (
 	"errors"
 	"fmt"
 	"os/exec"
+	"os/user"
 	"sort"
 	"strings"
+	"sync"
+	"time"
 )
 
-// DefaultEnvAllowlist is the minimal set of environment variables that are
-// preserved across the sudo boundary when RunAsUser is set. These are the
-// ones where "use the target user's value" either makes no sense (TERM) or
-// would break tooling that doesn't read them from the login profile (PATH
-// may be set by /etc/environment and the target's profile; we let sudo -i
-// override it if the target's profile sets its own).
-//
-// Deliberately excluded: HOME (overridden by -i), USER (overridden by -i),
-// LOGNAME (overridden by -i), SHELL (overridden by -i), PWD (set by cmd.Dir),
-// anything project-specific or secret.
+// currentUsername returns the current Unix login name, or "" if it can't
+// be determined. Used by runas_check.go when building example sudoers
+// snippets in error messages.
+func currentUsername() string {
+	u, err := user.Current()
+	if err != nil {
+		return ""
+	}
+	return u.Username
+}
+
+// DefaultEnvAllowlist is the minimal env preserved across the sudo
+// boundary. Deliberately excluded: HOME / USER / LOGNAME / SHELL
+// (sudo -i overrides them), PWD (set by cmd.Dir), anything secret.
 var DefaultEnvAllowlist = []string{
 	"PATH",
 	"LANG",
@@ -81,26 +88,17 @@ var DefaultEnvAllowlist = []string{
 	"TERM",
 }
 
-// SpawnOptions controls how a command is spawned. Zero value means
-// "supervisor user, legacy behavior".
+// SpawnOptions controls how a command is spawned. Zero value = legacy
+// supervisor-user spawn. Non-empty RunAsUser triggers sudo wrapping.
 type SpawnOptions struct {
-	// RunAsUser, when non-empty, causes the command to be spawned via
-	// `sudo -n -iu RunAsUser -- ...`. Empty = legacy behavior.
-	RunAsUser string
-
-	// EnvAllowlist extends DefaultEnvAllowlist with additional variable
-	// names that should cross the sudo boundary. The union of both lists
-	// is passed to `sudo --preserve-env=...`.
-	EnvAllowlist []string
+	RunAsUser    string
+	EnvAllowlist []string // extends DefaultEnvAllowlist, not a replacement
 }
 
-// IsolationMode reports whether the options request OS-user isolation.
 func (o SpawnOptions) IsolationMode() bool {
 	return o.RunAsUser != ""
 }
 
-// mergedAllowlist returns the sorted, deduplicated union of
-// DefaultEnvAllowlist and o.EnvAllowlist.
 func (o SpawnOptions) mergedAllowlist() []string {
 	seen := make(map[string]struct{}, len(DefaultEnvAllowlist)+len(o.EnvAllowlist))
 	for _, v := range DefaultEnvAllowlist {
@@ -120,41 +118,31 @@ func (o SpawnOptions) mergedAllowlist() []string {
 	return out
 }
 
-// BuildSpawnCommand constructs an *exec.Cmd that, depending on opts, either
-// invokes name/args directly (legacy) or wraps them in
-// `sudo -n -iu <user> --preserve-env=<allowlist> -- name args...`.
+// BuildSpawnCommand returns an *exec.Cmd that either invokes name/args
+// directly (legacy) or wraps them in `sudo -n -iu <user> --preserve-env=... -- name args...`.
 //
-// Callers are responsible for setting cmd.Dir, cmd.Env (via
-// FilterEnvForSpawn), cmd.Stdin/Stdout/Stderr, and cmd.SysProcAttr before
-// calling Start().
-//
-// BuildSpawnCommand does NOT perform the per-spawn re-check — see
-// VerifyRunAsUserCheap. Callers should run the re-check immediately before
-// Start() so that a sudoers change between preflight and spawn is caught.
+// Does NOT run the per-spawn re-check — callers should invoke
+// VerifyRunAsUserCheap immediately before Start() so a sudoers edit
+// between startup preflight and spawn is caught.
 func BuildSpawnCommand(ctx context.Context, opts SpawnOptions, name string, args ...string) *exec.Cmd {
 	if !opts.IsolationMode() {
 		return exec.CommandContext(ctx, name, args...)
 	}
 	sudoArgs := []string{
-		"-n",                          // never prompt
-		"-iu", opts.RunAsUser,         // initial-login as target
+		"-n",
+		"-iu", opts.RunAsUser,
 		"--preserve-env=" + strings.Join(opts.mergedAllowlist(), ","),
-		"--",                          // end of sudo flags
+		"--",
 		name,
 	}
 	sudoArgs = append(sudoArgs, args...)
 	return exec.CommandContext(ctx, "sudo", sudoArgs...)
 }
 
-// FilterEnvForSpawn returns a copy of env containing only variables whose
-// names appear in the merged allowlist (DefaultEnvAllowlist ∪
-// opts.EnvAllowlist). When opts.RunAsUser is empty, env is returned
-// unchanged.
-//
-// This is belt-and-braces with `sudo --preserve-env=...`: sudo already
-// strips anything not in its preserve list, but clearing cmd.Env here
-// makes the spawn command's own argv the single source of truth for what
-// crosses the boundary, and keeps test assertions simple.
+// FilterEnvForSpawn strips env down to the merged allowlist when
+// opts.IsolationMode() is true. Belt-and-braces with sudo's own
+// --preserve-env, but having cc-connect's spawn argv be the single
+// source of truth keeps test assertions clean.
 func FilterEnvForSpawn(env []string, opts SpawnOptions) []string {
 	if !opts.IsolationMode() {
 		return env
@@ -177,19 +165,14 @@ func FilterEnvForSpawn(env []string, opts SpawnOptions) []string {
 	return out
 }
 
-// SudoRunner is an injectable interface for running sudo commands. The
-// production implementation calls exec.CommandContext; tests inject a stub
-// that returns canned results without touching the real sudo binary.
+// SudoRunner runs `sudo <args...>` and returns combined output. Tests
+// inject a stub; production uses ExecSudoRunner.
 type SudoRunner interface {
-	// Run executes `sudo <args...>` and returns combined stdout+stderr.
-	// The exit code is encoded in err as *exec.ExitError; nil means exit 0.
 	Run(ctx context.Context, args ...string) ([]byte, error)
 }
 
-// ExecSudoRunner is the production SudoRunner backed by os/exec.
 type ExecSudoRunner struct{}
 
-// Run implements SudoRunner.
 func (ExecSudoRunner) Run(ctx context.Context, args ...string) ([]byte, error) {
 	return exec.CommandContext(ctx, "sudo", args...).CombinedOutput()
 }
@@ -202,9 +185,10 @@ func (ExecSudoRunner) Run(ctx context.Context, args ...string) ([]byte, error) {
 //  2. `sudo -n -iu <user> -- sudo -n /bin/true` must FAIL — the target user
 //     cannot non-interactively escalate.
 //
-// Returns nil if both checks behave as expected. Returns a descriptive
-// error otherwise. This is intentionally fast: no filesystem walks, no
-// JSON, just two exec calls. Meant to be safe to run on every spawn.
+// Returns nil if both checks behave as expected. Results are cached for
+// verifyCacheTTL keyed by runAsUser so rapid-fire messages don't pay the
+// ~100ms cost per spawn. A failure evicts the cache immediately so the
+// next spawn re-verifies fresh.
 //
 // The expensive checks (work_dir access, isolation probe) live in the
 // preflight and audit packages and only run at startup / via `cc-connect
@@ -213,14 +197,63 @@ func VerifyRunAsUserCheap(ctx context.Context, runner SudoRunner, runAsUser stri
 	if runAsUser == "" {
 		return errors.New("VerifyRunAsUserCheap: runAsUser is empty")
 	}
-	// Check 1: passwordless sudo to target works.
+	if verifyCacheHit(runAsUser) {
+		return nil
+	}
 	if out, err := runner.Run(ctx, "-n", "-iu", runAsUser, "--", "/bin/true"); err != nil {
+		verifyCacheEvict(runAsUser)
 		return fmt.Errorf("passwordless sudo to user %q failed (check that your sudoers rule is present and scoped to this user): %w: %s", runAsUser, err, strings.TrimSpace(string(out)))
 	}
-	// Check 2: target cannot escalate via sudo.
 	out, err := runner.Run(ctx, "-n", "-iu", runAsUser, "--", "sudo", "-n", "/bin/true")
 	if err == nil {
+		verifyCacheEvict(runAsUser)
 		return fmt.Errorf("target user %q can run passwordless sudo; isolation is meaningless. Remove NOPASSWD sudo for this user. Output: %s", runAsUser, strings.TrimSpace(string(out)))
 	}
+	verifyCacheStore(runAsUser)
 	return nil
+}
+
+// verifyCacheTTL is short by design. It absorbs a burst of messages
+// (one Slack user typing rapidly) while still re-verifying often enough
+// that a sudoers edit during a long idle gap is caught on the next spawn.
+const verifyCacheTTL = 30 * time.Second
+
+var (
+	verifyCacheMu sync.Mutex
+	verifyCache   = map[string]time.Time{}
+)
+
+func verifyCacheHit(user string) bool {
+	verifyCacheMu.Lock()
+	defer verifyCacheMu.Unlock()
+	expires, ok := verifyCache[user]
+	if !ok {
+		return false
+	}
+	if time.Now().After(expires) {
+		delete(verifyCache, user)
+		return false
+	}
+	return true
+}
+
+func verifyCacheStore(user string) {
+	verifyCacheMu.Lock()
+	defer verifyCacheMu.Unlock()
+	verifyCache[user] = time.Now().Add(verifyCacheTTL)
+}
+
+func verifyCacheEvict(user string) {
+	verifyCacheMu.Lock()
+	defer verifyCacheMu.Unlock()
+	delete(verifyCache, user)
+}
+
+// ResetVerifyCache clears all cached positive verification results. Used
+// by tests and available for any caller that wants to force a re-check
+// on the next spawn (e.g. after reloading sudoers).
+func ResetVerifyCache() {
+	verifyCacheMu.Lock()
+	defer verifyCacheMu.Unlock()
+	verifyCache = map[string]time.Time{}
 }

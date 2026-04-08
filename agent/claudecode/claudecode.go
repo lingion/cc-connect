@@ -49,11 +49,9 @@ type Agent struct {
 	proxyLocalURL  string              // local URL of the proxy
 	platformPrompt string              // platform-specific formatting instructions
 
-	// runAsUser, when non-empty, causes the claude CLI to be spawned via
-	// `sudo -n -iu <user> -- claude ...` for OS-user isolation. See
-	// core/runas.go for the mechanism and docs/usage.md for setup.
-	runAsUser string
-	runAsEnv  []string
+	// spawnOpts controls OS-user isolation via run_as_user. Zero value
+	// means legacy spawn as the supervisor user. See core/runas.go.
+	spawnOpts core.SpawnOptions
 
 	mu sync.RWMutex
 }
@@ -89,26 +87,24 @@ func New(opts map[string]any) (core.Agent, error) {
 	routerURL, _ := opts["router_url"].(string)
 	routerAPIKey, _ := opts["router_api_key"].(string)
 
-	// run_as_user: optional OS-user isolation. Injected into opts from the
-	// project-level config field by cmd/cc-connect/main.go before calling
-	// CreateAgent.
-	runAsUser, _ := opts["run_as_user"].(string)
-	var runAsEnv []string
+	// run_as_user: optional OS-user isolation. Injected into opts from
+	// the project-level config field by cmd/cc-connect/main.go.
+	spawnOpts := core.SpawnOptions{}
+	spawnOpts.RunAsUser, _ = opts["run_as_user"].(string)
 	if env, ok := opts["run_as_env"].([]any); ok {
 		for _, v := range env {
 			if s, ok := v.(string); ok {
-				runAsEnv = append(runAsEnv, s)
+				spawnOpts.EnvAllowlist = append(spawnOpts.EnvAllowlist, s)
 			}
 		}
 	} else if env, ok := opts["run_as_env"].([]string); ok {
-		runAsEnv = append(runAsEnv, env...)
+		spawnOpts.EnvAllowlist = append(spawnOpts.EnvAllowlist, env...)
 	}
 
-	// When run_as_user is set, `claude` must be on the target user's PATH,
-	// not the supervisor's. LookPath here runs as the supervisor, which is
-	// the wrong check; skip it and let the spawn fail loudly at runtime if
-	// the target user doesn't have claude installed.
-	if runAsUser == "" {
+	// When run_as_user is set, the target user's PATH is what matters;
+	// skip the supervisor-side LookPath check and let spawn fail loudly
+	// at runtime if the target doesn't have claude installed.
+	if !spawnOpts.IsolationMode() {
 		if _, err := exec.LookPath("claude"); err != nil {
 			return nil, fmt.Errorf("claudecode: 'claude' CLI not found in PATH, please install Claude Code first")
 		}
@@ -123,8 +119,7 @@ func New(opts map[string]any) (core.Agent, error) {
 		activeIdx:       -1,
 		routerURL:       routerURL,
 		routerAPIKey:    routerAPIKey,
-		runAsUser:       runAsUser,
-		runAsEnv:        runAsEnv,
+		spawnOpts:       spawnOpts,
 	}, nil
 }
 
@@ -302,10 +297,7 @@ func (a *Agent) StartSession(ctx context.Context, sessionID string) (core.AgentS
 	disableVerbose := a.routerURL != ""
 	a.mu.Unlock()
 
-	return newClaudeSession(ctx, a.workDir, model, sessionID, a.mode, tools, disTools, extraEnv, platformPrompt, disableVerbose, core.SpawnOptions{
-		RunAsUser:    a.runAsUser,
-		EnvAllowlist: a.runAsEnv,
-	})
+	return newClaudeSession(ctx, a.workDir, model, sessionID, a.mode, tools, disTools, extraEnv, platformPrompt, disableVerbose, a.spawnOpts)
 }
 
 func (a *Agent) ListSessions(ctx context.Context) ([]core.AgentSessionInfo, error) {

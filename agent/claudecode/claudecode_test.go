@@ -20,11 +20,11 @@ func TestNew_ParsesRunAsUserAndRunAsEnv(t *testing.T) {
 	if !ok {
 		t.Fatalf("agent is not *Agent: %T", a)
 	}
-	if ag.runAsUser != "partseeker-coder" {
-		t.Errorf("runAsUser = %q, want %q", ag.runAsUser, "partseeker-coder")
+	if ag.spawnOpts.RunAsUser != "partseeker-coder" {
+		t.Errorf("spawnOpts.RunAsUser = %q, want %q", ag.spawnOpts.RunAsUser, "partseeker-coder")
 	}
-	if len(ag.runAsEnv) != 2 || ag.runAsEnv[0] != "PGSSLROOTCERT" || ag.runAsEnv[1] != "PGSSLMODE" {
-		t.Errorf("runAsEnv = %v, want [PGSSLROOTCERT PGSSLMODE]", ag.runAsEnv)
+	if got := ag.spawnOpts.EnvAllowlist; len(got) != 2 || got[0] != "PGSSLROOTCERT" || got[1] != "PGSSLMODE" {
+		t.Errorf("spawnOpts.EnvAllowlist = %v, want [PGSSLROOTCERT PGSSLMODE]", got)
 	}
 }
 
