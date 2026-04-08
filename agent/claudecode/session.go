@@ -15,6 +15,7 @@ import (
 	"strings"
 	"sync"
 	"sync/atomic"
+	"syscall"
 	"time"
 
 	"github.com/chenhg5/cc-connect/core"
@@ -98,6 +99,13 @@ func newClaudeSession(ctx context.Context, workDir, model, sessionID, mode strin
 		env = core.MergeEnv(env, extraEnv)
 	}
 	cmd.Env = env
+
+	// Send SIGTERM first to allow Claude Code to run cleanup hooks (SessionEnd, PreCompact).
+	// After WaitDelay, escalate to the default SIGKILL behavior.
+	cmd.Cancel = func() error {
+		return cmd.Process.Signal(syscall.SIGTERM)
+	}
+	cmd.WaitDelay = 8 * time.Second
 
 	stdin, err := cmd.StdinPipe()
 	if err != nil {
