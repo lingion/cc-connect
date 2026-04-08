@@ -524,6 +524,39 @@ func (a *Agent) GetMode() string {
 	return a.mode
 }
 
+// GetRunAsUser returns the target user for OS-isolation spawning, or ""
+// if no isolation is configured. Set at construction from the project-level
+// run_as_user field (injected into opts by cmd/cc-connect/main.go).
+//
+// This accessor exists specifically so multi-workspace mode can propagate
+// run_as_user from the parent (project-level) agent into per-workspace
+// agent instances created lazily by core.Engine.getOrCreateWorkspaceAgent.
+// Without this, workspace agents are constructed with a fresh opts map
+// that never contained run_as_user, silently dropping back to the legacy
+// supervisor-user spawn path — which is exactly the leak cc-connect#496
+// is designed to prevent.
+func (a *Agent) GetRunAsUser() string {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	return a.spawnOpts.RunAsUser
+}
+
+// GetRunAsEnv returns the user-configured env allowlist extension (the
+// run_as_env project field), which is merged with core.DefaultEnvAllowlist
+// at spawn time. Returns nil if no extension is configured.
+//
+// Used by the multi-workspace propagation path alongside GetRunAsUser.
+func (a *Agent) GetRunAsEnv() []string {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	if len(a.spawnOpts.EnvAllowlist) == 0 {
+		return nil
+	}
+	out := make([]string, len(a.spawnOpts.EnvAllowlist))
+	copy(out, a.spawnOpts.EnvAllowlist)
+	return out
+}
+
 // PermissionModes returns all supported permission modes.
 func (a *Agent) PermissionModes() []core.PermissionModeInfo {
 	return []core.PermissionModeInfo{
