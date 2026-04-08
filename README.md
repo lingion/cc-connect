@@ -298,10 +298,13 @@ run_as_env = ["PGSSLROOTCERT"]
 
 The target user needs passwordless sudo from the supervisor, no sudo
 of its own, read+write on `work_dir`, and its own `~/.claude/settings.json`
-with whatever credentials the agent uses. See
+with whatever credentials the agent uses. If you authenticate via
+`claude.ai` OAuth, symlink the target user's `~/.claude/.credentials.json`
+to the supervisor's copy so token refresh stays in sync — see the
+[environment propagation checklist](./docs/usage.md#environment-propagation-what-moves-into-the-target-users-home)
+for details. See
 [`docs/usage.md`](./docs/usage.md#running-agents-as-a-different-unix-user-run_as_user)
-for the full setup including an environment-propagation checklist for
-migration from single-user setups.
+for the full setup.
 
 Before starting cc-connect, audit the setup with:
 

@@ -444,6 +444,31 @@ Migration checklist:
 - [ ] **Postgres TLS** — `PGSSLROOTCERT`, `PGSSLCERT`, `PGSSLKEY` belong
       in the target user's `~/.claude/settings.json` `env` block. Their
       referenced cert files must be readable by the target user.
+- [ ] **Claude OAuth credentials** — if you authenticate via `claude.ai`
+      (OAuth), the token lives in `~/.claude/.credentials.json`. OAuth
+      access tokens expire after a few hours and are refreshed
+      automatically by whichever Claude CLI session is running. The
+      target user's token will **not** be refreshed unless the target
+      user has an active session — which it often doesn't between
+      cc-connect spawns. The recommended fix is to symlink the target
+      user's credentials to the supervisor's file so both share one
+      token that stays fresh:
+
+      ```bash
+      # Grant target user read access via ACL (keeps 600 for everyone else)
+      setfacl -m u:<target-user>:rx ~/.claude/
+      setfacl -m u:<target-user>:r  ~/.claude/.credentials.json
+
+      # Replace the target user's credentials with a symlink
+      sudo -iu <target-user> bash -c \
+        'rm -f ~/.claude/.credentials.json && \
+         ln -s /home/<supervisor>/.claude/.credentials.json \
+               ~/.claude/.credentials.json'
+      ```
+
+      **If you use an API key** (`ANTHROPIC_API_KEY`) instead of OAuth,
+      this is not an issue — set the key in the target user's
+      `~/.claude/settings.json` `env` block and it won't expire.
 - [ ] **Credential files** — `~/.pgpass`, `~/.gitconfig`, `~/.netrc`,
       `~/.aws/`, `~/.config/gh/`, `~/.kube/` — whichever the agent
       actually uses. Each needs its own copy or a group-readable shared
