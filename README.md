@@ -283,6 +283,38 @@ reset_on_idle_mins = 60
 
 ---
 
+### 🛡️ OS-User Isolation (`run_as_user`)
+
+On Linux/macOS, a project can spawn its agent under a different Unix
+user for OS-level file-system isolation from the supervisor user that
+runs cc-connect. Currently supported by Claude Code.
+
+```toml
+[[projects]]
+name = "claude-sandboxed"
+run_as_user = "partseeker-coder"
+run_as_env = ["PGSSLROOTCERT"]
+```
+
+The target user needs passwordless sudo from the supervisor, no sudo
+of its own, read+write on `work_dir`, and its own `~/.claude/settings.json`
+with whatever credentials the agent uses. See
+[`docs/usage.md`](./docs/usage.md#running-agents-as-a-different-unix-user-run_as_user)
+for the full setup including an environment-propagation checklist for
+migration from single-user setups.
+
+Before starting cc-connect, audit the setup with:
+
+```bash
+cc-connect doctor user-isolation
+```
+
+This runs three go/no-go preflight gates and an isolation probe that
+reports what the target user can and cannot read. cc-connect refuses to
+start if any gate fails or if the probe detects a cross-user leak.
+
+---
+
 ### 🔐 Permission Modes
 
 ```
