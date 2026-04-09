@@ -2106,7 +2106,8 @@ func formatProgressToolInput(toolName, text string) string {
 		if formatted := formatTodoWriteInput(text, ""); formatted != "" {
 			return formatted
 		}
-		// Fall through to default formatting if JSON parsing fails
+		// JSON parsing failed or empty todos - show raw input as text block
+		return fmt.Sprintf("```text\n%s\n```", text)
 	}
 
 	text = preprocessFeishuMarkdown(sanitizeMarkdownURLs(text))
