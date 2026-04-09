@@ -1508,6 +1508,20 @@ func (e *Engine) maybeAutoResetSessionOnIdle(p Platform, msg *Message, sessions 
 		"threshold", e.resetOnIdle,
 	)
 
+	// Check if the old session has an agent process that needs graceful
+	// shutdown. If so, tell the user we're wrapping up before blocking.
+	e.interactiveMu.Lock()
+	state, hasState := e.interactiveStates[interactiveKey]
+	hasAgent := hasState && state != nil && state.agentSession != nil && state.agentSession.Alive()
+	e.interactiveMu.Unlock()
+
+	if hasAgent {
+		// Notify the user before the potentially long close. The close
+		// returns as soon as the process exits (usually seconds), but
+		// Stop hooks can take up to 120s.
+		e.reply(p, msg.ReplyCtx, e.i18n.T(MsgSessionClosingGraceful))
+	}
+
 	e.cleanupInteractiveState(interactiveKey)
 	session.UnlockWithoutUpdate()
 
@@ -2196,6 +2210,14 @@ func (e *Engine) closeAgentSessionWithTimeout(sessionKey string, agentSession Ag
 		return
 	}
 
+	// Allow enough time for the agent's own graceful shutdown sequence:
+	// stdin close → Stop hooks (claude-mem summary etc.) → SIGTERM → SIGKILL.
+	// Claude Code's Stop hooks can take up to 120s (claude-mem uses a
+	// sonnet summarizer). The 130s budget covers the default 120s graceful
+	// phase + 5s SIGTERM + 5s buffer. The wait ends early if the process
+	// exits sooner — this is the ceiling, not the typical duration.
+	const closeTimeout = 130 * time.Second
+
 	slog.Debug("cleanupInteractiveState: closing agent session", "session", sessionKey)
 	closeStart := time.Now()
 
@@ -2210,8 +2232,9 @@ func (e *Engine) closeAgentSessionWithTimeout(sessionKey string, agentSession Ag
 		if elapsed := time.Since(closeStart); elapsed >= slowAgentClose {
 			slog.Warn("slow agent session close", "elapsed", elapsed, "session", sessionKey)
 		}
-	case <-time.After(10 * time.Second):
-		slog.Error("agent session close timed out (10s), abandoning", "session", sessionKey)
+	case <-time.After(closeTimeout):
+		slog.Error("agent session close timed out, abandoning",
+			"timeout", closeTimeout, "session", sessionKey)
 	}
 }
 
@@ -2896,6 +2919,7 @@ var builtinCommands = []struct {
 	{[]string{"reasoning", "effort"}, "reasoning"},
 	{[]string{"mode"}, "mode"},
 	{[]string{"lang"}, "lang"},
+	{[]string{"quiet"}, "quiet"},
 	{[]string{"provider"}, "provider"},
 	{[]string{"memory"}, "memory"},
 	{[]string{"cron"}, "cron"},
@@ -3063,6 +3087,8 @@ func (e *Engine) handleCommand(p Platform, msg *Message, raw string) bool {
 		e.cmdMode(p, msg, args)
 	case "lang":
 		e.cmdLang(p, msg, args)
+	case "quiet":
+		e.cmdQuiet(p, msg, args)
 	case "provider":
 		e.cmdProvider(p, msg, args)
 	case "memory":
@@ -4861,6 +4887,7 @@ func helpCardGroups() []helpCardGroup {
 				{command: "/provider", action: "nav:/provider"},
 				{command: "/memory", action: "cmd:/memory"},
 				{command: "/allow", action: "cmd:/allow"},
+				{command: "/quiet", action: "cmd:/quiet"},
 				{command: "/tts", action: "cmd:/tts"},
 			},
 		},
@@ -5118,15 +5145,12 @@ func (e *Engine) cmdModel(p Platform, msg *Message, args []string) {
 		return
 	}
 
-	fetchCtx, cancel := context.WithTimeout(e.ctx, 10*time.Second)
-	defer cancel()
-	models := switcher.AvailableModels(fetchCtx)
-
-	target := targetInput
-	if idx, err := strconv.Atoi(target); err == nil && idx >= 1 && idx <= len(models) {
-		target = models[idx-1].Name
-	} else {
-		target = resolveModelAlias(models, target)
+	target := strings.TrimSpace(targetInput)
+	if modelSwitchNeedsLookup(target) {
+		fetchCtx, cancel := context.WithTimeout(e.ctx, 10*time.Second)
+		defer cancel()
+		models := switcher.AvailableModels(fetchCtx)
+		target = resolveModelSwitchTarget(target, models)
 	}
 
 	target, err = e.switchModelOnAgent(agent, target, agent == e.agent)
@@ -5154,6 +5178,33 @@ func resolveModelAlias(models []ModelOption, input string) string {
 		}
 	}
 	return input
+}
+
+func resolveModelSwitchTarget(input string, models []ModelOption) string {
+	input = strings.TrimSpace(input)
+	if idx, err := strconv.Atoi(input); err == nil && idx >= 1 && idx <= len(models) {
+		return models[idx-1].Name
+	}
+	if resolved := resolveModelAlias(models, input); resolved != input {
+		return resolved
+	}
+	for _, m := range models {
+		if strings.EqualFold(m.Name, input) {
+			return m.Name
+		}
+	}
+	return input
+}
+
+func modelSwitchNeedsLookup(input string) bool {
+	input = strings.TrimSpace(input)
+	if input == "" {
+		return false
+	}
+	if _, err := strconv.Atoi(input); err == nil {
+		return true
+	}
+	return !strings.Contains(input, "/")
 }
 
 func parseModelSwitchArgs(args []string) (string, bool) {
@@ -5211,6 +5262,10 @@ func (e *Engine) switchModelOnAgent(agent Agent, target string, persistConfig bo
 	providers := providerSwitcher.ListProviders()
 	updated, found := SetProviderModel(providers, active.Name, target)
 	if !found {
+		switcher.SetModel(target)
+		return target, nil
+	}
+	if !persistConfig {
 		switcher.SetModel(target)
 		return target, nil
 	}
@@ -5409,6 +5464,28 @@ func (e *Engine) applyLiveModeChange(sessionKey, mode string) bool {
 		return false
 	}
 	return switcher.SetLiveMode(mode)
+}
+
+func (e *Engine) cmdQuiet(p Platform, msg *Message, args []string) {
+	// /quiet toggles both ThinkingMessages and ToolMessages.
+	// Quiet ON = both hidden; Quiet OFF = both shown.
+	isQuiet := e.display.ThinkingMessages || e.display.ToolMessages
+	e.display.ThinkingMessages = !isQuiet
+	e.display.ToolMessages = !isQuiet
+
+	if e.displaySaveFunc != nil {
+		tm := e.display.ThinkingMessages
+		tool := e.display.ToolMessages
+		if err := e.displaySaveFunc(&tm, nil, nil, &tool); err != nil {
+			slog.Error("failed to persist display config after /quiet", "error", err)
+		}
+	}
+
+	if isQuiet {
+		e.reply(p, msg.ReplyCtx, e.i18n.T(MsgQuietOn))
+	} else {
+		e.reply(p, msg.ReplyCtx, e.i18n.T(MsgQuietOff))
+	}
 }
 
 func (e *Engine) cmdTTS(p Platform, msg *Message, args []string) {
@@ -6574,17 +6651,17 @@ func (e *Engine) executeCardAction(cmd, args, sessionKey string) {
 			return
 		}
 		fetchCtx, cancel := context.WithTimeout(e.ctx, 3*time.Second)
-		defer cancel()
-		models := switcher.AvailableModels(fetchCtx)
 		target, ok := parseModelSwitchArgs(strings.Fields(args))
 		if !ok {
+			cancel()
 			return
 		}
-		if idx, err := strconv.Atoi(target); err == nil && idx >= 1 && idx <= len(models) {
-			target = models[idx-1].Name
-		} else {
-			target = resolveModelAlias(models, target)
+		target = strings.TrimSpace(target)
+		if modelSwitchNeedsLookup(target) {
+			models := switcher.AvailableModels(fetchCtx)
+			target = resolveModelSwitchTarget(target, models)
 		}
+		cancel()
 		if _, err := e.switchModelOnAgent(agent, target, agent == e.agent); err != nil {
 			slog.Error("failed to switch model from card action", "model", target, "error", err)
 			return

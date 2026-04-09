@@ -351,6 +351,12 @@ type stubModelModeAgent struct {
 	active          string
 }
 
+type stubStrictModelAgent struct {
+	stubModelModeAgent
+	models []ModelOption
+	calls  int
+}
+
 type stubLiveModeSession struct {
 	stubAgentSession
 	modes []string
@@ -374,6 +380,11 @@ func (a *stubModelModeAgent) AvailableModels(_ context.Context) []ModelOption {
 		{Name: "gpt-4.1", Desc: "Balanced", Alias: "gpt"},
 		{Name: "gpt-4.1-mini", Desc: "Fast"},
 	}
+}
+
+func (a *stubStrictModelAgent) AvailableModels(_ context.Context) []ModelOption {
+	a.calls++
+	return append([]ModelOption(nil), a.models...)
 }
 
 func (a *stubModelModeAgent) SetProviders(providers []ProviderConfig) {
@@ -2919,6 +2930,51 @@ func TestCmdModel_UpdatesActiveProviderModel(t *testing.T) {
 	}
 }
 
+func TestCmdModel_DirectNameDoesNotNeedModelListMatch(t *testing.T) {
+	p := &stubPlatformEngine{n: "plain"}
+	agent := &stubStrictModelAgent{}
+	e := NewEngine("test", agent, []Platform{p}, "", LangEnglish)
+	msg := &Message{SessionKey: "test:user1", ReplyCtx: "ctx"}
+
+	e.cmdModel(p, msg, []string{"switch", "custom/provider-model"})
+
+	if agent.model != "custom/provider-model" {
+		t.Fatalf("agent model = %q, want custom/provider-model", agent.model)
+	}
+	if agent.calls != 0 {
+		t.Fatalf("AvailableModels calls = %d, want 0 for direct name switch", agent.calls)
+	}
+}
+
+func TestCmdModel_AliasWithPunctuationStillResolves(t *testing.T) {
+	p := &stubPlatformEngine{n: "plain"}
+	agent := &stubStrictModelAgent{models: []ModelOption{{Name: "openai/gpt-4.1", Alias: "gpt-4.1"}}}
+	e := NewEngine("test", agent, []Platform{p}, "", LangEnglish)
+	msg := &Message{SessionKey: "test:user1", ReplyCtx: "ctx"}
+
+	e.cmdModel(p, msg, []string{"switch", "gpt-4.1"})
+
+	if agent.model != "openai/gpt-4.1" {
+		t.Fatalf("agent model = %q, want openai/gpt-4.1", agent.model)
+	}
+	if agent.calls != 1 {
+		t.Fatalf("AvailableModels calls = %d, want 1 for punctuated alias lookup", agent.calls)
+	}
+}
+
+func TestCmdModel_AliasStillResolvesOnColdStart(t *testing.T) {
+	p := &stubPlatformEngine{n: "plain"}
+	agent := &stubStrictModelAgent{models: []ModelOption{{Name: "gpt-4.1", Alias: "gpt"}}}
+	e := NewEngine("test", agent, []Platform{p}, "", LangEnglish)
+	msg := &Message{SessionKey: "test:user1", ReplyCtx: "ctx"}
+
+	e.cmdModel(p, msg, []string{"switch", "gpt"})
+
+	if agent.model != "gpt-4.1" {
+		t.Fatalf("agent model = %q, want gpt-4.1", agent.model)
+	}
+}
+
 func TestCmdModel_LegacySyntaxStillWorks(t *testing.T) {
 	p := &stubPlatformEngine{n: "plain"}
 	agent := &stubModelModeAgent{}
@@ -3043,6 +3099,44 @@ func TestCmdModel_MultiWorkspaceUsesWorkspaceAgentAndSessions(t *testing.T) {
 	}
 	if got := e.sessions.GetOrCreateActive(msg.SessionKey).AgentSessionID; got != "global-session" {
 		t.Fatalf("global session id = %q, want untouched", got)
+	}
+}
+
+func TestCmdModel_MultiWorkspaceSwitchDoesNotMutateProviderModel(t *testing.T) {
+	p := &stubPlatformEngine{n: "plain"}
+	globalAgent := &stubModelModeAgent{model: "gpt-4.1-mini"}
+	e := NewEngine("test", globalAgent, []Platform{p}, "", LangEnglish)
+
+	baseDir := t.TempDir()
+	bindingPath := filepath.Join(t.TempDir(), "bindings.json")
+	e.SetMultiWorkspace(baseDir, bindingPath)
+
+	wsDir := normalizeWorkspacePath(t.TempDir())
+	channelID := "C-model-provider"
+	e.workspaceBindings.Bind("project:test", channelID, "chan", wsDir)
+
+	ws := e.workspacePool.GetOrCreate(wsDir)
+	wsAgent := &stubModelModeAgent{
+		model: "gpt-4.1-mini",
+		providers: []ProviderConfig{{
+			Name:   "openai",
+			Model:  "gpt-4.1-mini",
+			Models: []ModelOption{{Name: "gpt-4.1", Alias: "gpt"}, {Name: "gpt-4.1-mini", Alias: "mini"}},
+		}},
+		active: "openai",
+	}
+	ws.agent = wsAgent
+	ws.sessions = NewSessionManager("")
+
+	msg := &Message{SessionKey: "feishu:" + channelID + ":u1", ReplyCtx: "ctx"}
+
+	e.cmdModel(p, msg, []string{"switch", "gpt"})
+
+	if wsAgent.model != "gpt-4.1" {
+		t.Fatalf("workspace agent model = %q, want gpt-4.1", wsAgent.model)
+	}
+	if got := wsAgent.GetActiveProvider(); got == nil || got.Model != "gpt-4.1-mini" {
+		t.Fatalf("workspace active provider = %#v, want unchanged model gpt-4.1-mini", got)
 	}
 }
 
@@ -3539,6 +3633,34 @@ func TestCmdStatus_UsesLegacyTextOnPlatformWithoutCardSupport(t *testing.T) {
 	}
 	if strings.Contains(p.sent[0], "[← Back]") {
 		t.Fatalf("status text = %q, should not be card fallback text", p.sent[0])
+	}
+}
+
+func TestCmdQuiet_TogglesDisplay(t *testing.T) {
+	p := &stubPlatformEngine{n: "test"}
+	e := NewEngine("test", &stubAgent{}, []Platform{p}, "", LangEnglish)
+	e.SetDisplayConfig(DisplayCfg{ThinkingMessages: true, ToolMessages: true, ThinkingMaxLen: 300, ToolMaxLen: 500})
+	msg := &Message{SessionKey: "test:user1", ReplyCtx: "ctx"}
+
+	// First /quiet: both on → both off (quiet ON)
+	e.cmdQuiet(p, msg, nil)
+	if e.display.ThinkingMessages || e.display.ToolMessages {
+		t.Fatalf("after first /quiet: ThinkingMessages=%v, ToolMessages=%v, want both false",
+			e.display.ThinkingMessages, e.display.ToolMessages)
+	}
+	if len(p.sent) != 1 || !strings.Contains(p.sent[0], "Quiet mode ON") {
+		t.Fatalf("sent = %q, want quiet ON message", p.sent)
+	}
+
+	// Second /quiet: both off → both on (quiet OFF)
+	p.sent = nil
+	e.cmdQuiet(p, msg, nil)
+	if !e.display.ThinkingMessages || !e.display.ToolMessages {
+		t.Fatalf("after second /quiet: ThinkingMessages=%v, ToolMessages=%v, want both true",
+			e.display.ThinkingMessages, e.display.ToolMessages)
+	}
+	if len(p.sent) != 1 || !strings.Contains(p.sent[0], "Quiet mode OFF") {
+		t.Fatalf("sent = %q, want quiet OFF message", p.sent)
 	}
 }
 
