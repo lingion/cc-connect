@@ -868,7 +868,7 @@ func findProjectDir(homeDir, absWorkDir string) string {
 			return filepath.Join(projectsBase, entry.Name())
 		}
 		// Case-insensitive match for Windows compatibility
-		if strings.ToLower(entry.Name()) == strings.ToLower(encodedWorkDir) {
+		if strings.EqualFold(entry.Name(), encodedWorkDir) {
 			return filepath.Join(projectsBase, entry.Name())
 		}
 	}
