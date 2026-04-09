@@ -265,14 +265,15 @@ const (
 	MsgUsageFetchFailed   MsgKey = "usage_fetch_failed"
 
 	// Inline strings previously hardcoded in engine.go
-	MsgStatusMode       MsgKey = "status_mode"
-	MsgStatusSession    MsgKey = "status_session"
-	MsgStatusCron       MsgKey = "status_cron"
-	MsgStatusQuiet      MsgKey = "status_quiet"
-	MsgStatusSessionKey MsgKey = "status_session_key"
-	MsgStatusUserID     MsgKey = "status_user_id"
-	MsgQuietOnShort     MsgKey = "quiet_on_short"
-	MsgQuietOffShort    MsgKey = "quiet_off_short"
+	MsgStatusMode             MsgKey = "status_mode"
+	MsgStatusSession          MsgKey = "status_session"
+	MsgStatusCron             MsgKey = "status_cron"
+	MsgStatusThinkingMessages MsgKey = "status_thinking_messages"
+	MsgStatusToolMessages     MsgKey = "status_tool_messages"
+	MsgStatusSessionKey       MsgKey = "status_session_key"
+	MsgStatusUserID           MsgKey = "status_user_id"
+	MsgEnabledShort           MsgKey = "enabled_short"
+	MsgDisabledShort          MsgKey = "disabled_short"
 
 	MsgModelDefault               MsgKey = "model_default"
 	MsgModelListTitle             MsgKey = "model_list_title"
@@ -378,6 +379,12 @@ const (
 	MsgUpgradeSuccess     MsgKey = "upgrade_success"
 	MsgUpgradeDevBuild    MsgKey = "upgrade_dev_build"
 
+	MsgWebNotSupported MsgKey = "web_not_supported"
+	MsgWebNotEnabled   MsgKey = "web_not_enabled"
+	MsgWebSetupSuccess MsgKey = "web_setup_success"
+	MsgWebNeedRestart  MsgKey = "web_need_restart"
+	MsgWebStatus       MsgKey = "web_status"
+
 	MsgAliasEmpty      MsgKey = "alias_empty"
 	MsgAliasListHeader MsgKey = "alias_list_header"
 	MsgAliasAdded      MsgKey = "alias_added"
@@ -387,6 +394,8 @@ const (
 
 	MsgNewSessionCreated     MsgKey = "new_session_created"
 	MsgNewSessionCreatedName MsgKey = "new_session_created_name"
+	MsgSessionAutoResetIdle     MsgKey = "session_auto_reset_idle"
+	MsgSessionClosingGraceful   MsgKey = "session_closing_graceful"
 
 	MsgDeleteUsage              MsgKey = "delete_usage"
 	MsgDeleteSuccess            MsgKey = "delete_success"
@@ -481,6 +490,10 @@ const (
 	MsgBuiltinCmdBind      MsgKey = "bind"
 	MsgBuiltinCmdShell     MsgKey = "shell"
 	MsgBuiltinCmdDir       MsgKey = "dir"
+	MsgBuiltinCmdDiff      MsgKey = "diff"
+
+	MsgDiffEmpty           MsgKey = "diff_empty"
+	MsgDiffNoDiff2HTML     MsgKey = "diff_no_diff2html"
 
 	MsgDirChanged          MsgKey = "dir_changed"
 	MsgDirCurrent          MsgKey = "dir_current"
@@ -827,7 +840,6 @@ var messages = map[MsgKey]map[Language]string{
 			"/reasoning [level]\n  View/switch reasoning effort\n\n" +
 			"/mode [name]\n  View/switch permission mode\n\n" +
 			"/lang [en|zh|zh-TW|ja|es|auto]\n  View/switch language\n\n" +
-			"/quiet [global]\n  Toggle thinking/tool progress (global = all sessions)\n\n" +
 			"/compress\n  Compress conversation context\n\n" +
 			"/tts [always|voice_only]\n  View/switch text-to-speech mode\n\n" +
 			"/shell <command>\n  Run a shell command and return the output\n\n" +
@@ -870,7 +882,6 @@ var messages = map[MsgKey]map[Language]string{
 			"/reasoning [级别]\n  查看/切换推理强度\n\n" +
 			"/mode [名称]\n  查看/切换权限模式\n\n" +
 			"/lang [en|zh|zh-TW|ja|es|auto]\n  查看/切换语言\n\n" +
-			"/quiet [global]\n  开关思考和工具进度消息（global = 全部会话）\n\n" +
 			"/compress\n  压缩会话上下文\n\n" +
 			"/tts [always|voice_only]\n  查看/切换语音合成模式\n\n" +
 			"/shell <命令>\n  执行 Shell 命令并返回结果\n\n" +
@@ -913,7 +924,6 @@ var messages = map[MsgKey]map[Language]string{
 			"/reasoning [級別]\n  查看/切換推理強度\n\n" +
 			"/mode [名稱]\n  查看/切換權限模式\n\n" +
 			"/lang [en|zh|zh-TW|ja|es|auto]\n  查看/切換語言\n\n" +
-			"/quiet [global]\n  開關思考和工具進度訊息（global = 全部會話）\n\n" +
 			"/compress\n  壓縮會話上下文\n\n" +
 			"/tts [always|voice_only]\n  查看/切換語音合成模式\n\n" +
 			"/shell <命令>\n  執行 Shell 命令並返回結果\n\n" +
@@ -955,7 +965,6 @@ var messages = map[MsgKey]map[Language]string{
 			"/reasoning [レベル]\n  推論レベルの表示/切り替え\n\n" +
 			"/mode [名前]\n  権限モードの表示/切り替え\n\n" +
 			"/lang [en|zh|zh-TW|ja|es|auto]\n  言語の表示/切り替え\n\n" +
-			"/quiet [global]\n  思考/ツール進捗メッセージの表示切替（global = 全セッション）\n\n" +
 			"/compress\n  会話コンテキストを圧縮\n\n" +
 			"/tts [always|voice_only]\n  音声合成モードの表示/切り替え\n\n" +
 			"/shell <コマンド>\n  シェルコマンドを実行して結果を返す\n\n" +
@@ -997,7 +1006,6 @@ var messages = map[MsgKey]map[Language]string{
 			"/reasoning [nivel]\n  Ver/cambiar nivel de razonamiento\n\n" +
 			"/mode [nombre]\n  Ver/cambiar modo de permisos\n\n" +
 			"/lang [en|zh|zh-TW|ja|es|auto]\n  Ver/cambiar idioma\n\n" +
-			"/quiet [global]\n  Alternar mensajes de progreso (global = todas las sesiones)\n\n" +
 			"/compress\n  Comprimir contexto de conversación\n\n" +
 			"/tts [always|voice_only]\n  Ver/cambiar modo de síntesis de voz\n\n" +
 			"/shell <comando>\n  Ejecutar un comando shell y devolver la salida\n\n" +
@@ -1086,40 +1094,35 @@ var messages = map[MsgKey]map[Language]string{
 			"/provider [list|add|...] — Manage API providers\n" +
 			"/memory [add|global|...] — View/edit memory files\n" +
 			"/allow <tool> — Pre-allow a tool\n" +
-			"/lang [en|zh|...] — View/switch language\n" +
-			"/quiet [global] — Toggle progress messages",
+			"/lang [en|zh|...] — View/switch language",
 		LangChinese: "**Agent 配置**\n" +
 			"/model [switch <名称>] — 查看/切换模型\n" +
 			"/mode [名称] — 查看/切换权限模式\n" +
 			"/provider [list|add|...] — 管理 API Provider\n" +
 			"/memory [add|global|...] — 查看/编辑记忆文件\n" +
 			"/allow <工具名> — 预授权工具\n" +
-			"/lang [en|zh|...] — 查看/切换语言\n" +
-			"/quiet [global] — 开关进度消息",
+			"/lang [en|zh|...] — 查看/切换语言",
 		LangTraditionalChinese: "**Agent 配置**\n" +
 			"/model [switch <名稱>] — 查看/切換模型\n" +
 			"/mode [名稱] — 查看/切換權限模式\n" +
 			"/provider [list|add|...] — 管理 API Provider\n" +
 			"/memory [add|global|...] — 查看/編輯記憶檔案\n" +
 			"/allow <工具名> — 預授權工具\n" +
-			"/lang [en|zh|...] — 查看/切換語言\n" +
-			"/quiet [global] — 開關進度訊息",
+			"/lang [en|zh|...] — 查看/切換語言",
 		LangJapanese: "**エージェント設定**\n" +
 			"/model [switch <名前>] — モデルの表示/切り替え\n" +
 			"/mode [名前] — 権限モードの表示/切り替え\n" +
 			"/provider [list|add|...] — API プロバイダ管理\n" +
 			"/memory [add|global|...] — メモリの表示/編集\n" +
 			"/allow <ツール名> — ツールを事前許可\n" +
-			"/lang [en|zh|...] — 言語の表示/切り替え\n" +
-			"/quiet [global] — 進捗メッセージの表示切替",
+			"/lang [en|zh|...] — 言語の表示/切り替え",
 		LangSpanish: "**Configuración del agente**\n" +
 			"/model [switch <nombre>] — Ver/cambiar modelo\n" +
 			"/mode [nombre] — Ver/cambiar modo de permisos\n" +
 			"/provider [list|add|...] — Gestionar proveedores\n" +
 			"/memory [add|global|...] — Ver/editar memoria\n" +
 			"/allow <herramienta> — Pre-autorizar herramienta\n" +
-			"/lang [en|zh|...] — Ver/cambiar idioma\n" +
-			"/quiet [global] — Alternar mensajes de progreso",
+			"/lang [en|zh|...] — Ver/cambiar idioma",
 	},
 	MsgHelpToolsSection: {
 		LangEnglish: "**Tools & Automation**\n" +
@@ -1973,12 +1976,19 @@ var messages = map[MsgKey]map[Language]string{
 		LangJapanese:           "スケジュールタスク: %d (有効: %d)\n",
 		LangSpanish:            "Tareas programadas: %d (habilitadas: %d)\n",
 	},
-	MsgStatusQuiet: {
-		LangEnglish:            "Quiet mode: %s\n",
-		LangChinese:            "安静模式: %s\n",
-		LangTraditionalChinese: "安靜模式: %s\n",
-		LangJapanese:           "出力抑制モード: %s\n",
-		LangSpanish:            "Modo silencioso: %s\n",
+	MsgStatusThinkingMessages: {
+		LangEnglish:            "Thinking messages: %s\n",
+		LangChinese:            "思考消息: %s\n",
+		LangTraditionalChinese: "思考訊息: %s\n",
+		LangJapanese:           "思考メッセージ: %s\n",
+		LangSpanish:            "Mensajes de razonamiento: %s\n",
+	},
+	MsgStatusToolMessages: {
+		LangEnglish:            "Tool progress: %s\n",
+		LangChinese:            "工具进度: %s\n",
+		LangTraditionalChinese: "工具進度: %s\n",
+		LangJapanese:           "ツール進捗: %s\n",
+		LangSpanish:            "Progreso de herramientas: %s\n",
 	},
 	MsgStatusSessionKey: {
 		LangEnglish:            "Session Key: `%s`\n",
@@ -1994,14 +2004,14 @@ var messages = map[MsgKey]map[Language]string{
 		LangJapanese:           "ユーザーID: `%s`\n",
 		LangSpanish:            "ID de usuario: `%s`\n",
 	},
-	MsgQuietOnShort: {
+	MsgEnabledShort: {
 		LangEnglish:            "ON",
 		LangChinese:            "开启",
 		LangTraditionalChinese: "開啟",
 		LangJapanese:           "ON",
 		LangSpanish:            "Activado",
 	},
-	MsgQuietOffShort: {
+	MsgDisabledShort: {
 		LangEnglish:            "OFF",
 		LangChinese:            "关闭",
 		LangTraditionalChinese: "關閉",
@@ -2591,6 +2601,51 @@ var messages = map[MsgKey]map[Language]string{
 		LangJapanese:           "⚠️ 開発ビルドのため、バージョン確認ができません。ソースからビルドするか、リリース版をインストールしてください。",
 		LangSpanish:            "⚠️ Compilación de desarrollo — la verificación de versión no está disponible. Compile desde el código fuente o instale una versión publicada.",
 	},
+	MsgWebNotSupported: {
+		LangEnglish:            "⚠️ Web admin is not available in this build. Rebuild without the `no_web` tag to enable it.",
+		LangChinese:            "⚠️ 当前版本未包含 Web 管理后台。请去掉 `no_web` 标签重新编译以启用。",
+		LangTraditionalChinese: "⚠️ 目前版本未包含 Web 管理後台。請移除 `no_web` 標籤重新編譯以啟用。",
+		LangJapanese:           "⚠️ このビルドにはWeb管理画面が含まれていません。`no_web` タグなしで再ビルドしてください。",
+		LangSpanish:            "⚠️ La administración web no está incluida en esta compilación. Recompile sin la etiqueta `no_web`.",
+	},
+	MsgWebNotEnabled: {
+		LangEnglish:            "ℹ️ Web admin is not enabled.\n\nUse `/web setup` to configure and enable it.",
+		LangChinese:            "ℹ️ Web 管理后台未启用。\n\n使用 `/web setup` 配置并启用。",
+		LangTraditionalChinese: "ℹ️ Web 管理後台未啟用。\n\n使用 `/web setup` 設定並啟用。",
+		LangJapanese:           "ℹ️ Web管理画面は有効になっていません。\n\n`/web setup` で設定して有効にしてください。",
+		LangSpanish:            "ℹ️ La administración web no está habilitada.\n\nUsa `/web setup` para configurarla.",
+	},
+	MsgWebSetupSuccess: {
+		LangEnglish: "✅ Web admin configured!\n\n" +
+			"🌐 URL: %s\n🔑 Token: `%s`\n\n" +
+			"Open the URL in your browser and use the token to log in.",
+		LangChinese: "✅ Web 管理后台配置完成！\n\n" +
+			"🌐 地址：%s\n🔑 令牌：`%s`\n\n" +
+			"在浏览器打开地址，使用令牌登录。",
+		LangTraditionalChinese: "✅ Web 管理後台設定完成！\n\n" +
+			"🌐 網址：%s\n🔑 權杖：`%s`\n\n" +
+			"在瀏覽器開啟網址，使用權杖登入。",
+		LangJapanese: "✅ Web管理画面の設定が完了しました！\n\n" +
+			"🌐 URL: %s\n🔑 トークン: `%s`\n\n" +
+			"ブラウザでURLを開き、トークンでログインしてください。",
+		LangSpanish: "✅ Administración web configurada!\n\n" +
+			"🌐 URL: %s\n🔑 Token: `%s`\n\n" +
+			"Abre la URL en tu navegador y usa el token para iniciar sesión.",
+	},
+	MsgWebNeedRestart: {
+		LangEnglish:            "🔄 Restart the service with `/restart` to activate the web admin.",
+		LangChinese:            "🔄 请使用 `/restart` 重启服务以激活 Web 管理后台。",
+		LangTraditionalChinese: "🔄 請使用 `/restart` 重新啟動服務以啟動 Web 管理後台。",
+		LangJapanese:           "🔄 `/restart` でサービスを再起動して、Web管理画面を有効にしてください。",
+		LangSpanish:            "🔄 Reinicia el servicio con `/restart` para activar la administración web.",
+	},
+	MsgWebStatus: {
+		LangEnglish:            "🌐 **Web Admin**\n\nURL: %s",
+		LangChinese:            "🌐 **Web 管理后台**\n\n地址：%s",
+		LangTraditionalChinese: "🌐 **Web 管理後台**\n\n網址：%s",
+		LangJapanese:           "🌐 **Web管理画面**\n\nURL: %s",
+		LangSpanish:            "🌐 **Administración Web**\n\nURL: %s",
+	},
 	MsgAliasEmpty: {
 		LangEnglish:            "No aliases configured. Use `/alias add <trigger> <command>` to create one.",
 		LangChinese:            "暂无别名配置。使用 `/alias add <触发词> <命令>` 创建别名。",
@@ -2646,6 +2701,20 @@ var messages = map[MsgKey]map[Language]string{
 		LangTraditionalChinese: "✅ 新會話已建立：**%s**",
 		LangJapanese:           "✅ 新しいセッションを作成しました：**%s**",
 		LangSpanish:            "✅ Nueva sesión creada: **%s**",
+	},
+	MsgSessionAutoResetIdle: {
+		LangEnglish:            "⏰ Session auto-reset after %d minute(s) of inactivity.",
+		LangChinese:            "⏰ 因空闲超过 %d 分钟，已自动切换到新会话。",
+		LangTraditionalChinese: "⏰ 因閒置超過 %d 分鐘，已自動切換到新會話。",
+		LangJapanese:           "⏰ %d 分以上操作がなかったため、新しいセッションに自動切り替えました。",
+		LangSpanish:            "⏰ La sesión se reinició automáticamente tras %d minuto(s) de inactividad.",
+	},
+	MsgSessionClosingGraceful: {
+		LangEnglish:            "⏳ Wrapping up your previous session (usually a few seconds, up to 2 minutes). Your new session will start automatically.",
+		LangChinese:            "⏳ 正在结束上一个会话（通常几秒钟，最多2分钟）。新会话将自动启动。",
+		LangTraditionalChinese: "⏳ 正在結束上一個會話（通常幾秒鐘，最多2分鐘）。新會話將自動啟動。",
+		LangJapanese:           "⏳ 前のセッションを終了中です（通常は数秒、最大2分）。新しいセッションは自動的に開始されます。",
+		LangSpanish:            "⏳ Cerrando la sesión anterior (normalmente unos segundos, hasta 2 minutos). La nueva sesión se iniciará automáticamente.",
 	},
 	MsgDeleteUsage: {
 		LangEnglish:            "Usage: `/delete <number>` or `/delete 1,2,3` or `/delete 3-7` or `/delete 1,3-5,8`.\nUse `/list` to see session numbers.",
@@ -3225,6 +3294,27 @@ var messages = map[MsgKey]map[Language]string{
 		LangTraditionalChinese: "查看、切換或重置 Agent 工作目錄，參數: <路徑>",
 		LangJapanese:           "エージェントの作業ディレクトリを表示/変更/リセット、引数: <パス>",
 		LangSpanish:            "Ver, cambiar o restablecer el directorio de trabajo del agente, arg: <ruta>",
+	},
+	MsgBuiltinCmdDiff: {
+		LangEnglish:            "Generate git diff as HTML file, arg: [target]",
+		LangChinese:            "生成 git diff 并以 HTML 文件发送，参数: [目标]",
+		LangTraditionalChinese: "產生 git diff 並以 HTML 檔案傳送，參數: [目標]",
+		LangJapanese:           "git diff を HTML ファイルで生成、引数: [ターゲット]",
+		LangSpanish:            "Generar git diff como archivo HTML, arg: [objetivo]",
+	},
+	MsgDiffEmpty: {
+		LangEnglish:            "No diff — clean working tree (or no changes vs `%s`).",
+		LangChinese:            "无差异 — 工作区干净（或与 `%s` 无变化）。",
+		LangTraditionalChinese: "無差異 — 工作區乾淨（或與 `%s` 無變化）。",
+		LangJapanese:           "差分なし — 作業ツリーはクリーン（または `%s` との差分なし）。",
+		LangSpanish:            "Sin diferencias — árbol limpio (o sin cambios vs `%s`).",
+	},
+	MsgDiffNoDiff2HTML: {
+		LangEnglish:            "`diff2html` is not installed, sending plain text diff.\nInstall: `npm install -g diff2html-cli`",
+		LangChinese:            "未安装 `diff2html`，将以纯文本发送差异。\n安装命令: `npm install -g diff2html-cli`",
+		LangTraditionalChinese: "未安裝 `diff2html`，將以純文字傳送差異。\n安裝指令: `npm install -g diff2html-cli`",
+		LangJapanese:           "`diff2html` がインストールされていません。プレーンテキストで差分を送信します。\nインストール: `npm install -g diff2html-cli`",
+		LangSpanish:            "`diff2html` no está instalado, enviando diff en texto plano.\nInstalar: `npm install -g diff2html-cli`",
 	},
 	MsgDirChanged: {
 		LangEnglish:            "✅ Work directory changed to: `%s`\nThe next session will start in this directory.",
