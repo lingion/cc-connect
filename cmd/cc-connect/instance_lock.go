@@ -59,8 +59,8 @@ func AcquireInstanceLock(configPath string) (*InstanceLock, error) {
 
 	// Write our PID to the lock file for diagnostics
 	pid := os.Getpid()
-	f.Truncate(0)
-	f.Seek(0, 0)
+	_ = f.Truncate(0)
+	_, _ = f.Seek(0, 0)
 	fmt.Fprintf(f, "%d\n", pid)
 
 	return &InstanceLock{
@@ -78,8 +78,8 @@ func (l *InstanceLock) Release() {
 
 	// Remove PID before unlocking
 	if l.file != nil {
-		l.file.Truncate(0)
-		syscall.Flock(int(l.file.Fd()), syscall.LOCK_UN)
+		_ = l.file.Truncate(0)
+		_ = syscall.Flock(int(l.file.Fd()), syscall.LOCK_UN)
 		l.file.Close()
 		l.file = nil
 	}

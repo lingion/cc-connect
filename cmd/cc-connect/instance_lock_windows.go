@@ -24,9 +24,8 @@ func AcquireInstanceLock(configPath string) (*InstanceLock, error) {
 
 	// Write our PID to the lock file for diagnostics
 	pid := os.Getpid()
-	if err := os.WriteFile(lockPath, []byte(fmt.Sprintf("%d\n", pid)), 0644); err != nil {
-		// Non-fatal on Windows
-	}
+	// Non-fatal on Windows
+	_ = os.WriteFile(lockPath, []byte(fmt.Sprintf("%d\n", pid)), 0644)
 
 	return &InstanceLock{path: lockPath}, nil
 }
@@ -38,7 +37,7 @@ func (l *InstanceLock) Release() {
 	}
 	// Remove lock file
 	if l.path != "" {
-		os.Remove(l.path)
+		_ = os.Remove(l.path)
 	}
 }
 
