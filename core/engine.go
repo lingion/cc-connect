@@ -47,6 +47,35 @@ const (
 	replyFooterUsageCacheTTL = 30 * time.Second
 )
 
+// noReplyMarker — when an agent's final response is exactly this string
+// (case-insensitive, trimmed), platform delivery is suppressed. When it
+// appears as a trailing suffix, only the marker is stripped and the preceding
+// content is delivered normally. History is always recorded.
+const noReplyMarker = "NO_REPLY"
+
+// stripTrailingNoReply checks if s ends with the NO_REPLY marker (on its own
+// line or after whitespace) and returns the stripped content if found.
+func stripTrailingNoReply(s string) (string, bool) {
+	trimmed := strings.TrimRight(s, " \t")
+	for _, suffix := range []string{"\n" + noReplyMarker, "\n" + strings.ToLower(noReplyMarker)} {
+		if strings.HasSuffix(trimmed, suffix) {
+			return strings.TrimRight(trimmed[:len(trimmed)-len(suffix)], "\n "), true
+		}
+	}
+	// Also match when trailing on same line after whitespace.
+	lower := strings.ToLower(trimmed)
+	if strings.HasSuffix(lower, strings.ToLower(noReplyMarker)) {
+		before := trimmed[:len(trimmed)-len(noReplyMarker)]
+		if before == "" {
+			return "", false // exact match handled separately
+		}
+		if last := before[len(before)-1]; last == ' ' || last == '\t' || last == '\n' {
+			return strings.TrimRight(before, " \t\n"), true
+		}
+	}
+	return "", false
+}
+
 // VersionInfo is set by main at startup so that /version works.
 var VersionInfo string
 
@@ -2942,6 +2971,16 @@ func (e *Engine) processInteractiveEvents(state *interactiveState, session *Sess
 			cleanResponse = strings.TrimRight(cleanResponse, "\n ")
 			baseResponse := cleanResponse
 
+			// NO_REPLY marker: let agents suppress platform delivery.
+			// Exact match → suppress entirely; trailing marker → strip and deliver reasoning.
+			noReply := false
+			if strings.EqualFold(strings.TrimSpace(baseResponse), noReplyMarker) {
+				noReply = true
+			} else if stripped, ok := stripTrailingNoReply(baseResponse); ok {
+				baseResponse = stripped
+				cleanResponse = stripped
+			}
+
 			contextEstimate := estimateTokensWithPendingAssistant(session.GetHistory(0), baseResponse)
 
 			// Evaluate auto-compress trigger (token estimate on user+assistant text,
@@ -2969,6 +3008,14 @@ func (e *Engine) processInteractiveEvents(state *interactiveState, session *Sess
 				Platform:   p.Name(),
 				Content:    baseResponse,
 			})
+
+			// NO_REPLY: skip all platform delivery (send, preview, TTS, done reaction).
+			// History was already recorded above so the agent retains its knowledge.
+			if noReply {
+				sp.discard()
+				slog.Info("NO_REPLY: suppressing platform delivery", "session", session.ID)
+				// Fall through to auto-compress and queued message handling below.
+			} else {
 
 			if e.showContextIndicator {
 				if sdkPlausible {
@@ -3054,6 +3101,8 @@ func (e *Engine) processInteractiveEvents(state *interactiveState, session *Sess
 			} else {
 				slog.Debug("tts: not enabled", "tts_nil", e.tts == nil, "enabled", e.tts != nil && e.tts.Enabled, "tts_obj_nil", e.tts == nil || e.tts.TTS == nil)
 			}
+
+			} // end noReply else
 
 			// Auto-compress after finishing a turn, before sending any queued messages.
 			if triggerAutoCompress {
@@ -3172,8 +3221,10 @@ func (e *Engine) processInteractiveEvents(state *interactiveState, session *Sess
 			// Add a "done" reaction so the user knows the agent finished.
 			// The reaction is added after stopTyping (deferred) so the
 			// "doing" emoji is removed first.
-			if doneTI, ok := p.(TypingIndicatorDone); ok {
-				doneReaction = func() { doneTI.AddDoneReaction(replyCtx) }
+			if !noReply {
+				if doneTI, ok := p.(TypingIndicatorDone); ok {
+					doneReaction = func() { doneTI.AddDoneReaction(replyCtx) }
+				}
 			}
 
 			return

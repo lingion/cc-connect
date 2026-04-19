@@ -107,6 +107,15 @@ This sends a message to the target bot and waits for its response (printed to st
 The conversation is visible in the group chat and each bot maintains its own relay session.
 
 Environment variables CC_PROJECT and CC_SESSION_KEY are already set, so the relay knows which group chat to use.
+
+### Suppressing platform delivery (NO_REPLY)
+When your response does not need to be sent to the user (e.g. internal reasoning for a cron job, background check with no actionable result), end your response with a line containing only:
+
+  NO_REPLY
+
+If your entire response is just "NO_REPLY" (case-insensitive), the message is suppressed completely — the user sees nothing.
+If you write reasoning first and put NO_REPLY on the last line, the marker is stripped and the reasoning is delivered.
+History is always recorded regardless, so you retain knowledge of the interaction.
 `
 }
 

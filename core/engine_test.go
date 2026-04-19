@@ -9699,3 +9699,31 @@ type stubPlatformWithObserve struct {
 func (s *stubPlatformWithObserve) SendObservation(_ context.Context, _, _ string) error {
 	return nil
 }
+
+func TestStripTrailingNoReply(t *testing.T) {
+	cases := []struct {
+		input   string
+		want    string
+		wantOK  bool
+	}{
+		{"Hello\nNO_REPLY", "Hello", true},
+		{"Hello\nno_reply", "Hello", true},
+		{"Some reasoning here NO_REPLY", "Some reasoning here", true},
+		{"Line1\nLine2\nNO_REPLY", "Line1\nLine2", true},
+		{"NO_REPLY", "", false},       // exact match handled separately
+		{"no_reply", "", false},       // exact match handled separately
+		{"Hello world", "", false},
+		{"Hello NO_REPLY_EXTRA", "", false},
+		{"", "", false},
+	}
+
+	for _, c := range cases {
+		got, ok := stripTrailingNoReply(c.input)
+		if ok != c.wantOK {
+			t.Errorf("stripTrailingNoReply(%q): ok=%v, want %v", c.input, ok, c.wantOK)
+		}
+		if got != c.want {
+			t.Errorf("stripTrailingNoReply(%q): got=%q, want %q", c.input, got, c.want)
+		}
+	}
+}
