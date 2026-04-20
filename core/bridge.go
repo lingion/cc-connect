@@ -688,11 +688,13 @@ func (bs *BridgeServer) handleConnection(conn *websocket.Conn) {
 		return
 	}
 
-	if bridgeMetadataStringListContains(reg.Metadata, "control_plane", bridgeCapabilitiesSnapshotProto) {
+	isControlPlane := bridgeMetadataStringListContains(reg.Metadata, "control_plane", bridgeCapabilitiesSnapshotProto)
+	if isControlPlane {
 		if err := writeJSON(conn, &adapter.writeMu, bs.buildCapabilitiesSnapshot()); err != nil {
 			slog.Debug("bridge: write capabilities snapshot failed", "platform", reg.Platform, "error", err)
 			return
 		}
+		go bs.pushInitialHistorySync(adapter)
 	}
 
 	slog.Info("bridge: adapter registered", "platform", reg.Platform, "capabilities", reg.Capabilities)
@@ -732,6 +734,11 @@ func (bs *BridgeServer) handleConnection(conn *websocket.Conn) {
 			adapter.handleCardAction(raw)
 		case "preview_ack":
 			adapter.handlePreviewAck(raw)
+		case "fetch_history":
+			var req bridgeFetchHistory
+			if err := json.Unmarshal(raw, &req); err == nil {
+				go bs.handleFetchHistory(adapter, &req)
+			}
 		case "ping":
 			if err := writeJSON(conn, &adapter.writeMu, map[string]any{"type": "pong", "ts": time.Now().UnixMilli()}); err != nil {
 				slog.Debug("bridge: write pong failed", "platform", reg.Platform, "error", err)

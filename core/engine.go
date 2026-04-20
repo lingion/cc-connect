@@ -393,6 +393,10 @@ func NewEngine(name string, ag Agent, platforms []Platform, sessionStorePath str
 		e.sessions.InvalidateForAgent(ag.Name())
 	}
 
+	e.sessions.SetOnChangeCallback(func(sessionKey string) {
+		e.NotifyBridgeSessionChange(sessionKey)
+	})
+
 	if cp, ok := ag.(CommandProvider); ok {
 		e.commands.SetAgentDirs(cp.CommandDirs())
 	}
@@ -905,6 +909,25 @@ func (e *Engine) AgentTypeName() string {
 		return e.agent.Name()
 	}
 	return ""
+}
+
+// bridgeAgentStatus returns a summary status for the bridge protocol.
+func (e *Engine) bridgeAgentStatus() string {
+	e.interactiveMu.Lock()
+	defer e.interactiveMu.Unlock()
+	for _, state := range e.interactiveStates {
+		state.mu.Lock()
+		hasPending := state.pending != nil
+		hasSession := state.agentSession != nil
+		state.mu.Unlock()
+		if hasPending {
+			return "waiting_permission"
+		}
+		if hasSession {
+			return "running"
+		}
+	}
+	return "idle"
 }
 
 // ActiveSessionKeys returns the session keys of all active interactive sessions.

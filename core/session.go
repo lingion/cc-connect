@@ -181,6 +181,7 @@ type SessionManager struct {
 	userMeta      map[string]*UserMeta // sessionKey → display info
 	counter       int64
 	storePath     string // empty = no persistence
+	onChange      func(sessionKey string)
 }
 
 func NewSessionManager(storePath string) *SessionManager {
@@ -224,10 +225,21 @@ func (sm *SessionManager) GetOrCreateActive(userKey string) *Session {
 
 func (sm *SessionManager) NewSession(userKey, name string) *Session {
 	sm.mu.Lock()
-	defer sm.mu.Unlock()
 	s := sm.createLocked(userKey, name)
 	sm.saveLocked()
+	cb := sm.onChange
+	sm.mu.Unlock()
+	if cb != nil {
+		cb(userKey)
+	}
 	return s
+}
+
+// SetOnChangeCallback sets a function called after session list mutations.
+func (sm *SessionManager) SetOnChangeCallback(fn func(sessionKey string)) {
+	sm.mu.Lock()
+	defer sm.mu.Unlock()
+	sm.onChange = fn
 }
 
 // NewSideSession registers a new session for userKey without changing the active
@@ -267,16 +279,20 @@ func (sm *SessionManager) createLocked(userKey, name string) *Session {
 
 func (sm *SessionManager) SwitchSession(userKey, target string) (*Session, error) {
 	sm.mu.Lock()
-	defer sm.mu.Unlock()
-
 	for _, sid := range sm.userSessions[userKey] {
 		s := sm.sessions[sid]
 		if s != nil && (s.ID == target || s.Name == target) {
 			sm.activeSession[userKey] = s.ID
 			sm.saveLocked()
+			cb := sm.onChange
+			sm.mu.Unlock()
+			if cb != nil {
+				cb(userKey)
+			}
 			return s, nil
 		}
 	}
+	sm.mu.Unlock()
 	return nil, fmt.Errorf("session %q not found", target)
 }
 
@@ -327,6 +343,19 @@ func (sm *SessionManager) ActiveSessionID(userKey string) string {
 	sm.mu.RLock()
 	defer sm.mu.RUnlock()
 	return sm.activeSession[userKey]
+}
+
+// ForEachKey calls fn for every unique session key (user key) in the manager.
+func (sm *SessionManager) ForEachKey(fn func(sessionKey string)) {
+	sm.mu.RLock()
+	keys := make([]string, 0, len(sm.userSessions))
+	for k := range sm.userSessions {
+		keys = append(keys, k)
+	}
+	sm.mu.RUnlock()
+	for _, k := range keys {
+		fn(k)
+	}
 }
 
 // SetSessionName sets a custom display name for an agent session.
@@ -438,12 +467,29 @@ func (sm *SessionManager) FindByID(id string) *Session {
 // DeleteByID removes a session by its internal ID from all tracking structures.
 func (sm *SessionManager) DeleteByID(id string) bool {
 	sm.mu.Lock()
-	defer sm.mu.Unlock()
 	if _, ok := sm.sessions[id]; !ok {
+		sm.mu.Unlock()
 		return false
+	}
+	var affectedKey string
+	for uk, ids := range sm.userSessions {
+		for _, sid := range ids {
+			if sid == id {
+				affectedKey = uk
+				break
+			}
+		}
+		if affectedKey != "" {
+			break
+		}
 	}
 	sm.deleteByIDLocked(id)
 	sm.saveLocked()
+	cb := sm.onChange
+	sm.mu.Unlock()
+	if cb != nil && affectedKey != "" {
+		cb(affectedKey)
+	}
 	return true
 }
 

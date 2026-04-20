@@ -38,8 +38,11 @@ type bridgeCapabilitiesHost struct {
 }
 
 type bridgeProjectCapabilities struct {
-	Project  string                   `json:"project"`
-	Commands []bridgePublishedCommand `json:"commands"`
+	Project   string                   `json:"project"`
+	AgentType string                   `json:"agent_type,omitempty"`
+	WorkDir   string                   `json:"work_dir,omitempty"`
+	Status    string                   `json:"status,omitempty"` // idle | running | waiting_permission
+	Commands  []bridgePublishedCommand `json:"commands"`
 }
 
 type bridgePublishedCommand struct {
@@ -122,10 +125,19 @@ func (bs *BridgeServer) buildCapabilitiesSnapshot() bridgeCapabilitiesSnapshot {
 		if ref == nil || ref.engine == nil {
 			continue
 		}
-		projects = append(projects, bridgeProjectCapabilities{
-			Project:  projectName,
-			Commands: ref.engine.GetBridgePublishedCommands(),
-		})
+		cap := bridgeProjectCapabilities{
+			Project:   projectName,
+			AgentType: ref.engine.AgentTypeName(),
+			Commands:  ref.engine.GetBridgePublishedCommands(),
+		}
+		if wd, ok := ref.engine.agent.(interface{ GetWorkDir() string }); ok {
+			cap.WorkDir = wd.GetWorkDir()
+		}
+		if cap.WorkDir == "" {
+			cap.WorkDir = ref.engine.baseWorkDir
+		}
+		cap.Status = ref.engine.bridgeAgentStatus()
+		projects = append(projects, cap)
 	}
 	bs.enginesMu.RUnlock()
 

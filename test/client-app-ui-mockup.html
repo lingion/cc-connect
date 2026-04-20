@@ -1,84 +1,65 @@
 <!DOCTYPE html>
-<html lang="zh" data-theme="dark">
+<html lang="zh" class="dark">
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>CC-Connect Client — UI Reference</title>
 <style>
   :root {
-    --font-sans: -apple-system, BlinkMacSystemFont, 'Inter', 'Segoe UI', 'Noto Sans SC', sans-serif;
+    --font-sans: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Inter', 'Noto Sans SC', sans-serif;
     --font-mono: 'SF Mono', 'Fira Code', 'JetBrains Mono', 'Consolas', monospace;
-    --radius-sm: 6px;
-    --radius-md: 10px;
-    --radius-lg: 14px;
-    --radius-xl: 18px;
-    --transition: 180ms ease;
   }
 
-  [data-theme="dark"] {
-    --bg-root: #0c0c0e;
-    --bg-sidebar: #111114;
-    --bg-main: #16161a;
-    --bg-card: #1c1c21;
-    --bg-input: #1c1c21;
-    --bg-hover: #22222a;
-    --bg-active: #2a2a35;
-    --bg-badge: rgba(99,102,241,0.15);
-    --bg-code: #1a1a20;
-    --border: #27272e;
-    --border-light: #1f1f26;
-    --text-primary: #e8e8ed;
-    --text-secondary: #8b8b9a;
-    --text-tertiary: #55555f;
-    --text-inverse: #0c0c0e;
-    --accent: #6366f1;
-    --accent-hover: #7577f5;
-    --accent-muted: rgba(99,102,241,0.12);
-    --green: #22c55e;
-    --green-muted: rgba(34,197,94,0.12);
-    --yellow: #eab308;
-    --yellow-muted: rgba(234,179,8,0.12);
-    --red: #ef4444;
-    --red-muted: rgba(239,68,68,0.12);
-    --orange: #f97316;
-    --diff-add-bg: rgba(34,197,94,0.08);
-    --diff-add-text: #4ade80;
-    --diff-del-bg: rgba(239,68,68,0.08);
-    --diff-del-text: #f87171;
-    --shadow: 0 1px 3px rgba(0,0,0,0.4);
+  /* ═══ Dark theme (default, matches web/ dark mode) ═══ */
+  .dark {
+    --accent: 66, 255, 156;
+    --accent-dim: 43, 200, 122;
+
+    --bg-root: #050505;
+    --bg-sidebar: rgba(0, 0, 0, 0.85);
+    --bg-main: #0a0a0a;
+    --bg-card: rgba(0, 0, 0, 0.55);
+    --bg-input: rgba(0, 0, 0, 0.45);
+    --bg-hover: rgba(255, 255, 255, 0.06);
+    --bg-active: rgba(255, 255, 255, 0.08);
+    --bg-code: #0d1117;
+    --bg-badge: rgba(255, 255, 255, 0.08);
+
+    --border: rgba(255, 255, 255, 0.08);
+    --border-subtle: rgba(255, 255, 255, 0.05);
+
+    --text-primary: #ffffff;
+    --text-secondary: #a0a0ab;
+    --text-tertiary: #63636e;
+    --text-quaternary: #3e3e47;
+
+    --shadow-accent: 0 0 20px -6px rgba(66, 255, 156, 0.55);
   }
 
-  [data-theme="light"] {
-    --bg-root: #f5f5f7;
-    --bg-sidebar: #ffffff;
-    --bg-main: #fafafa;
-    --bg-card: #ffffff;
-    --bg-input: #f0f0f3;
-    --bg-hover: #ececf0;
-    --bg-active: #e4e4ea;
-    --bg-badge: rgba(99,102,241,0.08);
-    --bg-code: #f4f4f8;
-    --border: #e2e2e8;
-    --border-light: #ededf0;
-    --text-primary: #1a1a1e;
+  /* ═══ Light theme (matches web/ light mode) ═══ */
+  .light {
+    --accent: 22, 163, 74;
+    --accent-dim: 21, 128, 61;
+
+    --bg-root: #f8f8fa;
+    --bg-sidebar: rgba(255, 255, 255, 0.75);
+    --bg-main: #ffffff;
+    --bg-card: rgba(255, 255, 255, 0.80);
+    --bg-input: rgba(255, 255, 255, 0.90);
+    --bg-hover: rgba(0, 0, 0, 0.04);
+    --bg-active: rgba(0, 0, 0, 0.06);
+    --bg-code: #fafafa;
+    --bg-badge: rgba(0, 0, 0, 0.05);
+
+    --border: rgba(0, 0, 0, 0.12);
+    --border-subtle: rgba(0, 0, 0, 0.06);
+
+    --text-primary: #111113;
     --text-secondary: #6b6b7a;
     --text-tertiary: #9b9baa;
-    --text-inverse: #ffffff;
-    --accent: #4f46e5;
-    --accent-hover: #4338ca;
-    --accent-muted: rgba(79,70,229,0.08);
-    --green: #16a34a;
-    --green-muted: rgba(22,163,74,0.08);
-    --yellow: #ca8a04;
-    --yellow-muted: rgba(202,138,4,0.08);
-    --red: #dc2626;
-    --red-muted: rgba(220,38,38,0.08);
-    --orange: #ea580c;
-    --diff-add-bg: rgba(22,163,74,0.06);
-    --diff-add-text: #16a34a;
-    --diff-del-bg: rgba(220,38,38,0.06);
-    --diff-del-text: #dc2626;
-    --shadow: 0 1px 3px rgba(0,0,0,0.08);
+    --text-quaternary: #c5c5d0;
+
+    --shadow-accent: none;
   }
 
   * { margin: 0; padding: 0; box-sizing: border-box; }
@@ -92,158 +73,134 @@
     min-height: 100vh;
   }
 
-  /* ─── Layout Shell ─── */
-  .app-shell {
-    display: flex;
-    height: 100vh;
-    overflow: hidden;
-  }
+  /* ═══ Shell ═══ */
+  .shell { display: flex; height: 100vh; overflow: hidden; }
 
+  /* ═══ Sidebar ═══ */
   .sidebar {
-    width: 280px;
-    min-width: 280px;
+    width: 224px;
+    min-width: 224px;
     background: var(--bg-sidebar);
+    backdrop-filter: blur(20px);
+    -webkit-backdrop-filter: blur(20px);
     border-right: 1px solid var(--border);
     display: flex;
     flex-direction: column;
-    overflow: hidden;
-  }
-
-  .sidebar-header {
-    padding: 16px 16px 12px;
-    border-bottom: 1px solid var(--border-light);
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
   }
 
   .sidebar-brand {
+    height: 52px;
+    padding: 0 16px;
     display: flex;
     align-items: center;
-    gap: 8px;
-  }
-
-  .brand-dot {
-    width: 10px; height: 10px;
-    border-radius: 50%;
-    background: linear-gradient(135deg, var(--accent), var(--green));
-    box-shadow: 0 0 8px rgba(99,102,241,0.3);
-  }
-
-  .brand-name {
+    border-bottom: 1px solid var(--border);
     font-size: 14px;
-    font-weight: 600;
+    font-weight: 700;
     letter-spacing: -0.3px;
   }
 
-  .sidebar-actions {
-    display: flex;
-    gap: 4px;
-  }
+  .sidebar-brand .sep { color: rgb(var(--accent)); }
 
-  .icon-btn {
-    width: 30px; height: 30px;
-    border: none;
-    background: transparent;
-    color: var(--text-secondary);
-    border-radius: var(--radius-sm);
-    cursor: pointer;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    font-size: 15px;
-    transition: all var(--transition);
-  }
+  .sidebar-nav { flex: 1; padding: 12px 8px; overflow-y: auto; }
 
-  .icon-btn:hover {
-    background: var(--bg-hover);
-    color: var(--text-primary);
-  }
-
-  .sidebar-section {
-    padding: 12px 12px 4px;
-  }
-
-  .sidebar-label {
-    font-size: 10.5px;
+  .nav-label {
+    font-size: 10px;
     font-weight: 600;
     text-transform: uppercase;
     letter-spacing: 0.8px;
     color: var(--text-tertiary);
-    padding: 0 4px 8px;
+    padding: 16px 8px 6px;
   }
 
-  .sidebar-list {
-    list-style: none;
-    display: flex;
-    flex-direction: column;
-    gap: 2px;
-  }
+  .nav-label:first-child { padding-top: 0; }
 
-  .sidebar-item {
+  .nav-item {
     display: flex;
     align-items: center;
     gap: 10px;
-    padding: 8px 10px;
-    border-radius: var(--radius-md);
-    cursor: pointer;
-    transition: all var(--transition);
+    padding: 7px 10px;
+    border-radius: 10px;
     font-size: 13px;
     color: var(--text-secondary);
+    cursor: pointer;
+    transition: all 150ms ease;
+    font-weight: 450;
   }
 
-  .sidebar-item:hover { background: var(--bg-hover); color: var(--text-primary); }
-  .sidebar-item.active { background: var(--accent-muted); color: var(--accent); font-weight: 500; }
+  .nav-item:hover { background: var(--bg-hover); color: var(--text-primary); }
 
-  .status-dot {
-    width: 7px; height: 7px;
+  .nav-item.active {
+    background: rgba(var(--accent), 0.12);
+    color: rgb(var(--accent));
+    box-shadow: inset 0 0 0 1px rgba(var(--accent), 0.25);
+  }
+
+  .nav-icon {
+    width: 16px;
+    text-align: center;
+    font-size: 14px;
+    opacity: 0.7;
+    flex-shrink: 0;
+  }
+
+  .nav-item.active .nav-icon { opacity: 1; }
+
+  .nav-meta {
+    margin-left: auto;
+    font-size: 11px;
+    color: var(--text-tertiary);
+    font-weight: 400;
+  }
+
+  .nav-item.active .nav-meta { color: rgba(var(--accent), 0.6); }
+
+  .dot {
+    width: 6px; height: 6px;
     border-radius: 50%;
     flex-shrink: 0;
   }
-  .status-dot.idle { background: var(--green); box-shadow: 0 0 6px rgba(34,197,94,0.4); }
-  .status-dot.running { background: var(--yellow); box-shadow: 0 0 6px rgba(234,179,8,0.4); animation: pulse 1.5s ease infinite; }
-  .status-dot.waiting { background: var(--red); box-shadow: 0 0 6px rgba(239,68,68,0.4); animation: pulse 1s ease infinite; }
 
-  @keyframes pulse {
-    0%, 100% { opacity: 1; }
-    50% { opacity: 0.4; }
-  }
+  .dot-on { background: rgb(var(--accent)); box-shadow: 0 0 6px rgba(var(--accent), 0.5); }
+  .dot-dim { background: var(--text-quaternary); }
+  .dot-pulse { background: var(--text-tertiary); animation: pulse 2s ease infinite; }
 
-  .item-meta {
-    font-size: 11px;
-    color: var(--text-tertiary);
-    margin-left: auto;
-    white-space: nowrap;
-  }
-
-  .sidebar-sessions {
-    flex: 1;
-    overflow-y: auto;
-    padding: 0 12px 12px;
-  }
+  @keyframes pulse { 0%,100% { opacity: 1; } 50% { opacity: 0.3; } }
 
   .sidebar-footer {
-    padding: 12px;
-    border-top: 1px solid var(--border-light);
+    padding: 10px 12px;
+    border-top: 1px solid var(--border);
     display: flex;
     align-items: center;
     justify-content: space-between;
   }
 
-  .connection-badge {
+  .conn-badge {
     display: flex;
     align-items: center;
     gap: 6px;
     font-size: 11px;
     color: var(--text-tertiary);
-    padding: 4px 8px;
-    background: var(--green-muted);
-    border-radius: var(--radius-sm);
   }
 
-  .connection-badge .status-dot { width: 5px; height: 5px; }
+  .conn-badge .dot { width: 5px; height: 5px; }
 
-  /* ─── Main Content ─── */
+  .icon-btn {
+    width: 28px; height: 28px;
+    border: none;
+    background: transparent;
+    color: var(--text-tertiary);
+    border-radius: 8px;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 14px;
+    transition: all 150ms;
+  }
+
+  .icon-btn:hover { background: var(--bg-hover); color: var(--text-secondary); }
+
+  /* ═══ Main ═══ */
   .main {
     flex: 1;
     display: flex;
@@ -252,377 +209,168 @@
     background: var(--bg-main);
   }
 
-  .main-header {
+  .topbar {
     height: 52px;
-    min-height: 52px;
     padding: 0 20px;
     border-bottom: 1px solid var(--border);
     display: flex;
     align-items: center;
     justify-content: space-between;
-    background: var(--bg-sidebar);
+    flex-shrink: 0;
   }
 
-  .header-left {
-    display: flex;
-    align-items: center;
-    gap: 12px;
-  }
+  .topbar-left { display: flex; align-items: center; gap: 12px; }
 
-  .header-title {
-    font-size: 14px;
-    font-weight: 600;
-  }
+  .topbar-title { font-size: 14px; font-weight: 600; }
 
-  .header-agent-badge {
-    font-size: 11px;
-    padding: 2px 8px;
-    border-radius: var(--radius-sm);
-    background: var(--accent-muted);
-    color: var(--accent);
+  .agent-badge {
+    font-size: 10px;
     font-weight: 500;
+    padding: 2px 7px;
+    border-radius: 6px;
+    background: rgba(var(--accent), 0.1);
+    color: rgb(var(--accent));
+    border: 1px solid rgba(var(--accent), 0.2);
   }
 
-  .header-status {
+  .status-label {
     display: flex;
     align-items: center;
-    gap: 6px;
-    font-size: 12px;
-    color: var(--text-secondary);
+    gap: 5px;
+    font-size: 11px;
+    color: var(--text-tertiary);
+    font-weight: 450;
   }
 
-  .header-right {
-    display: flex;
-    align-items: center;
-    gap: 4px;
-  }
+  .topbar-right { display: flex; gap: 2px; }
 
-  /* ─── Messages ─── */
+  /* ═══ Messages ═══ */
   .messages {
     flex: 1;
     overflow-y: auto;
-    padding: 20px 24px;
+    padding: 24px;
     display: flex;
     flex-direction: column;
-    gap: 16px;
+    gap: 20px;
   }
 
-  .msg {
-    display: flex;
-    gap: 12px;
-    max-width: 820px;
-  }
+  .msg { display: flex; gap: 12px; max-width: 780px; }
 
   .msg-avatar {
-    width: 28px; height: 28px;
-    border-radius: var(--radius-sm);
+    width: 26px; height: 26px;
+    border-radius: 8px;
     display: flex;
     align-items: center;
     justify-content: center;
-    font-size: 13px;
-    flex-shrink: 0;
-    margin-top: 2px;
-  }
-
-  .msg-avatar.user {
-    background: var(--accent-muted);
-    color: var(--accent);
-    font-weight: 600;
-  }
-
-  .msg-avatar.agent {
-    background: var(--green-muted);
-    color: var(--green);
-    font-weight: 600;
-  }
-
-  .msg-body {
-    flex: 1;
-    min-width: 0;
-  }
-
-  .msg-header {
-    display: flex;
-    align-items: baseline;
-    gap: 8px;
-    margin-bottom: 4px;
-  }
-
-  .msg-name {
-    font-size: 13px;
-    font-weight: 600;
-  }
-
-  .msg-time {
     font-size: 11px;
-    color: var(--text-tertiary);
+    font-weight: 600;
+    flex-shrink: 0;
+    margin-top: 1px;
   }
 
-  .msg-content {
+  .msg-avatar.user { background: var(--bg-badge); color: var(--text-secondary); }
+  .msg-avatar.agent { background: rgba(var(--accent), 0.1); color: rgb(var(--accent)); }
+
+  .msg-body { flex: 1; min-width: 0; }
+
+  .msg-head { display: flex; align-items: baseline; gap: 8px; margin-bottom: 3px; }
+  .msg-name { font-size: 12px; font-weight: 600; }
+  .msg-time { font-size: 10px; color: var(--text-quaternary); }
+
+  .msg-text {
     font-size: 13.5px;
     line-height: 1.65;
     color: var(--text-primary);
   }
 
-  .msg-content p { margin-bottom: 8px; }
-  .msg-content p:last-child { margin-bottom: 0; }
+  .msg-text p { margin-bottom: 6px; }
+  .msg-text p:last-child { margin-bottom: 0; }
 
-  /* Code block */
-  .code-block {
-    background: var(--bg-code);
-    border: 1px solid var(--border);
-    border-radius: var(--radius-md);
-    margin: 8px 0;
-    overflow: hidden;
+  .inline-code {
+    font-family: var(--font-mono);
+    font-size: 0.875em;
+    padding: 1px 5px;
+    border-radius: 5px;
+    background: var(--bg-badge);
+    border: 1px solid var(--border-subtle);
+    color: var(--text-secondary);
   }
 
-  .code-header {
+  /* Code block — GitHub style */
+  .code-block {
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    margin: 10px 0;
+    overflow: hidden;
+    background: var(--bg-code);
+  }
+
+  .code-head {
     display: flex;
-    align-items: center;
     justify-content: space-between;
     padding: 6px 12px;
-    border-bottom: 1px solid var(--border-light);
+    border-bottom: 1px solid var(--border-subtle);
     font-size: 11px;
     color: var(--text-tertiary);
+    font-family: var(--font-mono);
   }
 
   .code-body {
-    padding: 12px 14px;
+    padding: 14px 16px;
     font-family: var(--font-mono);
     font-size: 12.5px;
-    line-height: 1.6;
+    line-height: 1.65;
+    color: var(--text-secondary);
     overflow-x: auto;
-    color: var(--text-secondary);
   }
 
-  .code-body .kw { color: #c792ea; }
-  .code-body .fn { color: #82aaff; }
-  .code-body .str { color: #c3e88d; }
-  .code-body .cm { color: #546e7a; }
-  .code-body .tp { color: #ffcb6b; }
+  .dark .code-body .kw { color: #ff7b72; }
+  .dark .code-body .fn { color: #d2a8ff; }
+  .dark .code-body .str { color: #a5d6ff; }
+  .dark .code-body .tp { color: #ffa657; }
+  .light .code-body .kw { color: #cf222e; }
+  .light .code-body .fn { color: #8250df; }
+  .light .code-body .str { color: #0a3069; }
+  .light .code-body .tp { color: #953800; }
 
-  /* Permission card */
-  .perm-card {
-    background: var(--bg-card);
+  /* Diff — minimal, gray-based */
+  .diff-block {
     border: 1px solid var(--border);
-    border-radius: var(--radius-lg);
-    padding: 16px;
-    margin: 8px 0;
-    box-shadow: var(--shadow);
-  }
-
-  .perm-header {
-    display: flex;
-    align-items: center;
-    gap: 8px;
-    margin-bottom: 10px;
-  }
-
-  .perm-icon {
-    width: 24px; height: 24px;
-    border-radius: 6px;
-    background: var(--yellow-muted);
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    font-size: 12px;
-  }
-
-  .perm-title {
-    font-size: 13px;
-    font-weight: 600;
-  }
-
-  .perm-detail {
-    font-family: var(--font-mono);
-    font-size: 12px;
-    color: var(--text-secondary);
-    padding: 8px 10px;
-    background: var(--bg-code);
-    border-radius: var(--radius-sm);
-    margin-bottom: 12px;
-    word-break: break-all;
-  }
-
-  .perm-actions {
-    display: flex;
-    gap: 8px;
-  }
-
-  .btn {
-    padding: 6px 14px;
-    border: 1px solid var(--border);
-    border-radius: var(--radius-sm);
-    font-size: 12.5px;
-    font-weight: 500;
-    cursor: pointer;
-    transition: all var(--transition);
-    background: var(--bg-card);
-    color: var(--text-secondary);
-    font-family: var(--font-sans);
-  }
-
-  .btn:hover { background: var(--bg-hover); color: var(--text-primary); }
-
-  .btn-primary {
-    background: var(--accent);
-    color: white;
-    border-color: var(--accent);
-  }
-  .btn-primary:hover { background: var(--accent-hover); }
-
-  .btn-danger {
-    color: var(--red);
-    border-color: var(--red-muted);
-    background: var(--red-muted);
-  }
-  .btn-danger:hover { background: var(--red); color: white; }
-
-  /* Streaming indicator */
-  .streaming {
-    display: inline-flex;
-    align-items: center;
-    gap: 6px;
-    font-size: 12px;
-    color: var(--accent);
-    padding: 4px 0;
-  }
-
-  .streaming-dots span {
-    display: inline-block;
-    width: 4px; height: 4px;
-    border-radius: 50%;
-    background: var(--accent);
-    animation: bounce 1.2s infinite;
-  }
-  .streaming-dots span:nth-child(2) { animation-delay: 0.2s; }
-  .streaming-dots span:nth-child(3) { animation-delay: 0.4s; }
-
-  @keyframes bounce {
-    0%, 80%, 100% { opacity: 0.3; transform: scale(0.8); }
-    40% { opacity: 1; transform: scale(1); }
-  }
-
-  /* ─── Composer ─── */
-  .composer {
-    padding: 12px 24px 16px;
-    border-top: 1px solid var(--border);
-    background: var(--bg-sidebar);
-  }
-
-  .composer-inner {
-    display: flex;
-    align-items: flex-end;
-    gap: 8px;
-    background: var(--bg-input);
-    border: 1px solid var(--border);
-    border-radius: var(--radius-lg);
-    padding: 8px 12px;
-    transition: border-color var(--transition);
-  }
-
-  .composer-inner:focus-within {
-    border-color: var(--accent);
-  }
-
-  .composer-input {
-    flex: 1;
-    border: none;
-    outline: none;
-    background: transparent;
-    color: var(--text-primary);
-    font-size: 13.5px;
-    font-family: var(--font-sans);
-    resize: none;
-    min-height: 20px;
-    max-height: 120px;
-    line-height: 1.5;
-  }
-
-  .composer-input::placeholder {
-    color: var(--text-tertiary);
-  }
-
-  .composer-actions {
-    display: flex;
-    gap: 2px;
-    align-items: center;
-  }
-
-  .composer-btn {
-    width: 30px; height: 30px;
-    border: none;
-    background: transparent;
-    color: var(--text-tertiary);
-    border-radius: var(--radius-sm);
-    cursor: pointer;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    font-size: 16px;
-    transition: all var(--transition);
-  }
-
-  .composer-btn:hover { background: var(--bg-hover); color: var(--text-primary); }
-  .composer-btn.send { color: var(--accent); }
-  .composer-btn.send:hover { background: var(--accent-muted); }
-
-  .composer-hint {
-    display: flex;
-    align-items: center;
-    gap: 12px;
-    padding-top: 6px;
-    font-size: 11px;
-    color: var(--text-tertiary);
-  }
-
-  .kbd {
-    font-family: var(--font-mono);
-    font-size: 10px;
-    padding: 1px 5px;
-    background: var(--bg-hover);
-    border: 1px solid var(--border);
-    border-radius: 3px;
-  }
-
-  /* ─── Diff Panel ─── */
-  .diff-panel {
-    margin: 8px 0;
-    border: 1px solid var(--border);
-    border-radius: var(--radius-md);
+    border-radius: 10px;
+    margin: 10px 0;
     overflow: hidden;
   }
 
-  .diff-file-header {
+  .diff-head {
     display: flex;
-    align-items: center;
     justify-content: space-between;
+    align-items: center;
     padding: 8px 12px;
     background: var(--bg-card);
-    border-bottom: 1px solid var(--border-light);
-    font-size: 12px;
+    backdrop-filter: blur(12px);
+    border-bottom: 1px solid var(--border-subtle);
   }
 
-  .diff-file-path {
+  .diff-path {
     font-family: var(--font-mono);
+    font-size: 12px;
     font-weight: 500;
-    color: var(--text-primary);
   }
 
   .diff-stat {
-    display: flex;
-    gap: 8px;
     font-family: var(--font-mono);
     font-size: 11px;
+    display: flex;
+    gap: 6px;
+    color: var(--text-tertiary);
   }
 
-  .diff-stat .add { color: var(--diff-add-text); }
-  .diff-stat .del { color: var(--diff-del-text); }
+  .diff-stat .a { color: rgb(var(--accent)); }
 
   .diff-lines {
     font-family: var(--font-mono);
     font-size: 12px;
-    line-height: 1.65;
+    line-height: 1.7;
   }
 
   .diff-line {
@@ -632,219 +380,338 @@
   }
 
   .diff-line .ln {
-    width: 40px;
+    width: 36px;
     text-align: right;
-    padding-right: 12px;
-    color: var(--text-tertiary);
+    padding-right: 10px;
+    color: var(--text-quaternary);
     user-select: none;
     flex-shrink: 0;
     font-size: 11px;
   }
 
-  .diff-line .code { flex: 1; }
-  .diff-line.add { background: var(--diff-add-bg); }
-  .diff-line.add .code { color: var(--diff-add-text); }
-  .diff-line.del { background: var(--diff-del-bg); }
-  .diff-line.del .code { color: var(--diff-del-text); }
-  .diff-line.ctx .code { color: var(--text-secondary); }
-  .diff-line.hunk { color: var(--text-tertiary); font-style: italic; padding: 4px 12px; background: var(--bg-hover); }
+  .diff-line .c { flex: 1; }
+  .diff-line.add { background: rgba(var(--accent), 0.06); }
+  .diff-line.add .c { color: rgb(var(--accent)); }
+  .diff-line.del { background: rgba(255, 255, 255, 0.03); }
+  .diff-line.del .c { color: var(--text-tertiary); text-decoration: line-through; text-decoration-color: var(--text-quaternary); }
+  .light .diff-line.del { background: rgba(0, 0, 0, 0.02); }
+  .diff-line.ctx .c { color: var(--text-tertiary); }
+  .diff-line.hunk { color: var(--text-quaternary); font-style: italic; padding: 3px 12px; background: var(--bg-hover); }
 
-  /* ─── Command Palette ─── */
-  .cmd-palette {
-    position: absolute;
-    bottom: 100%;
-    left: 0; right: 0;
-    margin-bottom: 4px;
+  /* Permission card — clean gray + accent for primary action only */
+  .perm-card {
     background: var(--bg-card);
+    backdrop-filter: blur(16px);
+    -webkit-backdrop-filter: blur(16px);
     border: 1px solid var(--border);
-    border-radius: var(--radius-lg);
-    box-shadow: 0 -4px 24px rgba(0,0,0,0.25);
-    padding: 6px;
-    max-height: 240px;
-    overflow-y: auto;
+    border-radius: 12px;
+    padding: 14px 16px;
+    margin: 10px 0;
   }
 
-  .cmd-item {
+  .perm-head {
     display: flex;
     align-items: center;
-    gap: 10px;
-    padding: 8px 10px;
-    border-radius: var(--radius-sm);
-    cursor: pointer;
-    transition: background var(--transition);
+    gap: 8px;
+    margin-bottom: 10px;
   }
 
-  .cmd-item:hover, .cmd-item.active { background: var(--bg-hover); }
-
-  .cmd-name {
-    font-family: var(--font-mono);
-    font-size: 12.5px;
-    font-weight: 500;
-    color: var(--accent);
-    min-width: 80px;
-  }
-
-  .cmd-desc {
-    font-size: 12px;
+  .perm-icon {
+    width: 22px; height: 22px;
+    border-radius: 6px;
+    background: var(--bg-badge);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 11px;
     color: var(--text-secondary);
   }
 
-  /* ─── Theme Toggle ─── */
+  .perm-title { font-size: 13px; font-weight: 600; }
+
+  .perm-path {
+    font-family: var(--font-mono);
+    font-size: 12px;
+    color: var(--text-secondary);
+    padding: 6px 10px;
+    background: var(--bg-hover);
+    border-radius: 6px;
+    margin-bottom: 12px;
+  }
+
+  .perm-actions { display: flex; gap: 6px; }
+
+  .btn {
+    padding: 6px 14px;
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    font-size: 12px;
+    font-weight: 500;
+    cursor: pointer;
+    transition: all 150ms;
+    font-family: var(--font-sans);
+    background: var(--bg-badge);
+    color: var(--text-secondary);
+  }
+
+  .btn:hover { background: var(--bg-active); color: var(--text-primary); }
+
+  .btn-accent {
+    background: rgb(var(--accent));
+    color: #000;
+    border-color: rgb(var(--accent));
+    font-weight: 600;
+  }
+
+  .dark .btn-accent { box-shadow: var(--shadow-accent); }
+  .btn-accent:hover { background: rgb(var(--accent-dim)); }
+
+  .btn-ghost {
+    background: transparent;
+    border-color: transparent;
+    color: var(--text-tertiary);
+  }
+  .btn-ghost:hover { background: var(--bg-hover); color: var(--text-secondary); }
+
+  /* Streaming */
+  .streaming {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 11px;
+    color: var(--text-tertiary);
+    padding: 3px 0;
+  }
+
+  .streaming-bar {
+    width: 2px; height: 14px;
+    background: rgb(var(--accent));
+    border-radius: 1px;
+    animation: blink 0.8s ease infinite;
+  }
+
+  @keyframes blink { 0%,100% { opacity: 1; } 50% { opacity: 0; } }
+
+  /* ═══ Composer ═══ */
+  .composer {
+    padding: 12px 24px 16px;
+    border-top: 1px solid var(--border);
+  }
+
+  .composer-box {
+    display: flex;
+    align-items: flex-end;
+    gap: 8px;
+    background: var(--bg-input);
+    backdrop-filter: blur(12px);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 10px 12px;
+    transition: border-color 150ms;
+  }
+
+  .composer-box:focus-within { border-color: rgba(var(--accent), 0.5); }
+
+  .composer-input {
+    flex: 1;
+    border: none;
+    outline: none;
+    background: transparent;
+    color: var(--text-primary);
+    font-size: 13px;
+    font-family: var(--font-sans);
+    resize: none;
+    min-height: 20px;
+    line-height: 1.5;
+  }
+
+  .composer-input::placeholder { color: var(--text-quaternary); }
+
+  .composer-btns { display: flex; gap: 2px; }
+
+  .composer-btn {
+    width: 28px; height: 28px;
+    border: none;
+    background: transparent;
+    color: var(--text-quaternary);
+    border-radius: 6px;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 15px;
+    transition: all 150ms;
+  }
+
+  .composer-btn:hover { background: var(--bg-hover); color: var(--text-secondary); }
+  .composer-btn.primary { color: rgb(var(--accent)); }
+  .composer-btn.primary:hover { background: rgba(var(--accent), 0.1); }
+
+  .composer-hints {
+    display: flex;
+    gap: 12px;
+    padding: 5px 2px 0;
+    font-size: 10.5px;
+    color: var(--text-quaternary);
+  }
+
+  .kbd {
+    font-family: var(--font-mono);
+    font-size: 10px;
+    padding: 0px 4px;
+    border-radius: 3px;
+    border: 1px solid var(--border);
+    background: var(--bg-hover);
+    color: var(--text-tertiary);
+  }
+
+  /* ═══ Theme Toggle ═══ */
   .theme-toggle {
     position: fixed;
-    top: 12px;
-    right: 12px;
+    top: 10px;
+    right: 10px;
     z-index: 100;
     display: flex;
-    background: var(--bg-card);
-    border: 1px solid var(--border);
-    border-radius: var(--radius-md);
+    border-radius: 8px;
     overflow: hidden;
+    border: 1px solid var(--border);
+    background: var(--bg-card);
+    backdrop-filter: blur(12px);
   }
 
   .theme-toggle button {
-    padding: 6px 12px;
+    padding: 5px 10px;
     border: none;
     background: transparent;
     color: var(--text-tertiary);
-    font-size: 13px;
+    font-size: 12px;
+    font-family: var(--font-sans);
     cursor: pointer;
-    transition: all var(--transition);
+    transition: all 150ms;
   }
 
   .theme-toggle button.active {
-    background: var(--accent-muted);
-    color: var(--accent);
+    background: rgba(var(--accent), 0.12);
+    color: rgb(var(--accent));
   }
 
-  /* ─── Scrollbar ─── */
-  ::-webkit-scrollbar { width: 6px; }
+  /* ═══ Scrollbar ═══ */
+  ::-webkit-scrollbar { width: 5px; }
   ::-webkit-scrollbar-track { background: transparent; }
-  ::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
-  ::-webkit-scrollbar-thumb:hover { background: var(--text-tertiary); }
+  ::-webkit-scrollbar-thumb { background: rgba(128,128,128,0.3); border-radius: 3px; }
+  ::-webkit-scrollbar-thumb:hover { background: rgba(128,128,128,0.5); }
 </style>
 </head>
 <body>
 
 <div class="theme-toggle">
-  <button class="active" onclick="setTheme('dark')">Dark</button>
+  <button onclick="setTheme('dark')" class="active">Dark</button>
   <button onclick="setTheme('light')">Light</button>
 </div>
 
-<div class="app-shell">
-  <!-- ─── Sidebar ─── -->
+<div class="shell">
+
+  <!-- ═══ Sidebar ═══ -->
   <aside class="sidebar">
-    <div class="sidebar-header">
-      <div class="sidebar-brand">
-        <div class="brand-dot"></div>
-        <span class="brand-name">CC-Connect</span>
-      </div>
-      <div class="sidebar-actions">
-        <button class="icon-btn" title="New Session">＋</button>
-        <button class="icon-btn" title="Settings">⚙</button>
-      </div>
+    <div class="sidebar-brand">
+      CC<span class="sep">-</span>Connect
     </div>
 
-    <div class="sidebar-section">
-      <div class="sidebar-label">Projects</div>
-      <ul class="sidebar-list">
-        <li class="sidebar-item active">
-          <span class="status-dot running"></span>
-          <span>my-project</span>
-          <span class="item-meta">Claude Code</span>
-        </li>
-        <li class="sidebar-item">
-          <span class="status-dot idle"></span>
-          <span>data-pipeline</span>
-          <span class="item-meta">Codex</span>
-        </li>
-        <li class="sidebar-item">
-          <span class="status-dot waiting"></span>
-          <span>web-app</span>
-          <span class="item-meta">Gemini</span>
-        </li>
-      </ul>
-    </div>
+    <div class="sidebar-nav">
+      <div class="nav-label">Projects</div>
 
-    <div class="sidebar-section">
-      <div class="sidebar-label">Sessions</div>
-    </div>
-    <div class="sidebar-sessions">
-      <ul class="sidebar-list">
-        <li class="sidebar-item active">
-          <span style="font-size:14px;opacity:0.5">💬</span>
-          <span>重构 UserService</span>
-        </li>
-        <li class="sidebar-item">
-          <span style="font-size:14px;opacity:0.5">💬</span>
-          <span>修复登录 Bug</span>
-        </li>
-        <li class="sidebar-item">
-          <span style="font-size:14px;opacity:0.5">💬</span>
-          <span>添加单元测试</span>
-        </li>
-        <li class="sidebar-item">
-          <span style="font-size:14px;opacity:0.5">💬</span>
-          <span>API 文档生成</span>
-        </li>
-      </ul>
+      <div class="nav-item active">
+        <span class="nav-icon">📂</span>
+        <span>my-project</span>
+        <span class="nav-meta">Claude</span>
+      </div>
+      <div class="nav-item">
+        <span class="nav-icon">📂</span>
+        <span>data-pipeline</span>
+        <span class="nav-meta">Codex</span>
+      </div>
+      <div class="nav-item">
+        <span class="nav-icon">📂</span>
+        <span>web-app</span>
+        <span class="nav-meta">Gemini</span>
+      </div>
+
+      <div class="nav-label">Sessions</div>
+
+      <div class="nav-item active">
+        <span class="dot dot-on"></span>
+        <span>重构 UserService</span>
+      </div>
+      <div class="nav-item">
+        <span class="dot dot-dim"></span>
+        <span>修复登录 Bug</span>
+      </div>
+      <div class="nav-item">
+        <span class="dot dot-dim"></span>
+        <span>添加单元测试</span>
+      </div>
+      <div class="nav-item">
+        <span class="dot dot-dim"></span>
+        <span>API 文档生成</span>
+      </div>
     </div>
 
     <div class="sidebar-footer">
-      <div class="connection-badge">
-        <span class="status-dot idle"></span>
-        <span>Mac-Studio · 局域网</span>
+      <div class="conn-badge">
+        <span class="dot dot-on"></span>
+        Mac-Studio · LAN
       </div>
-      <button class="icon-btn" title="QR Pair">⊞</button>
+      <button class="icon-btn" title="New session">＋</button>
     </div>
   </aside>
 
-  <!-- ─── Main ─── -->
+  <!-- ═══ Main ═══ -->
   <main class="main">
-    <div class="main-header">
-      <div class="header-left">
-        <span class="header-title">重构 UserService</span>
-        <span class="header-agent-badge">Claude Code</span>
-        <div class="header-status">
-          <span class="status-dot running"></span>
-          <span>运行中</span>
+    <div class="topbar">
+      <div class="topbar-left">
+        <span class="topbar-title">重构 UserService</span>
+        <span class="agent-badge">Claude Code</span>
+        <div class="status-label">
+          <span class="dot dot-pulse" style="width:5px;height:5px"></span>
+          运行中
         </div>
       </div>
-      <div class="header-right">
+      <div class="topbar-right">
         <button class="icon-btn" title="Diff">⇅</button>
-        <button class="icon-btn" title="Files">📁</button>
+        <button class="icon-btn" title="Files">☰</button>
         <button class="icon-btn" title="More">⋯</button>
       </div>
     </div>
 
     <div class="messages">
-      <!-- User message -->
+
+      <!-- User -->
       <div class="msg">
         <div class="msg-avatar user">Y</div>
         <div class="msg-body">
-          <div class="msg-header">
+          <div class="msg-head">
             <span class="msg-name">You</span>
             <span class="msg-time">14:32</span>
           </div>
-          <div class="msg-content">
+          <div class="msg-text">
             <p>帮我重构 UserService，把数据库查询抽到 Repository 层，Service 只处理业务逻辑。</p>
           </div>
         </div>
       </div>
 
-      <!-- Agent reply with code -->
+      <!-- Agent reply -->
       <div class="msg">
         <div class="msg-avatar agent">C</div>
         <div class="msg-body">
-          <div class="msg-header">
+          <div class="msg-head">
             <span class="msg-name">Claude Code</span>
             <span class="msg-time">14:32</span>
           </div>
-          <div class="msg-content">
+          <div class="msg-text">
             <p>好的，我来帮你重构。先创建 Repository 接口和实现：</p>
 
             <div class="code-block">
-              <div class="code-header">
+              <div class="code-head">
                 <span>internal/repo/user_repo.go</span>
                 <span>Go</span>
               </div>
@@ -855,39 +722,34 @@
     <span class="fn">Delete</span>(ctx context.Context, id <span class="tp">string</span>) error
 }
 
-<span class="kw">type</span> <span class="tp">pgUserRepo</span> <span class="kw">struct</span> {
-    db *sql.DB
-}
-
 <span class="kw">func</span> <span class="fn">NewUserRepo</span>(db *sql.DB) UserRepo {
     <span class="kw">return</span> &pgUserRepo{db: db}
 }</div>
             </div>
 
-            <p>现在重构 Service 层，移除直接的数据库依赖：</p>
+            <p>现在重构 Service 层，移除直接的 <span class="inline-code">*sql.DB</span> 依赖：</p>
 
-            <!-- Diff inline -->
-            <div class="diff-panel">
-              <div class="diff-file-header">
-                <span class="diff-file-path">internal/service/user_service.go</span>
+            <div class="diff-block">
+              <div class="diff-head">
+                <span class="diff-path">internal/service/user_service.go</span>
                 <div class="diff-stat">
-                  <span class="add">+12</span>
-                  <span class="del">-8</span>
+                  <span class="a">+12</span>
+                  <span>−8</span>
                 </div>
               </div>
               <div class="diff-lines">
                 <div class="diff-line hunk">@@ -15,12 +15,16 @@ type UserService struct {</div>
-                <div class="diff-line del"><span class="ln">15</span><span class="code">-    db     *sql.DB</span></div>
-                <div class="diff-line del"><span class="ln">16</span><span class="code">-    cache  *redis.Client</span></div>
-                <div class="diff-line add"><span class="ln">15</span><span class="code">+    repo   UserRepo</span></div>
-                <div class="diff-line add"><span class="ln">16</span><span class="code">+    cache  Cache</span></div>
-                <div class="diff-line ctx"><span class="ln">17</span><span class="code"> }</span></div>
-                <div class="diff-line ctx"><span class="ln">18</span><span class="code"> </span></div>
-                <div class="diff-line del"><span class="ln">19</span><span class="code">-func NewUserService(db *sql.DB, cache *redis.Client) *UserService {</span></div>
-                <div class="diff-line del"><span class="ln">20</span><span class="code">-    return &UserService{db: db, cache: cache}</span></div>
-                <div class="diff-line add"><span class="ln">19</span><span class="code">+func NewUserService(repo UserRepo, cache Cache) *UserService {</span></div>
-                <div class="diff-line add"><span class="ln">20</span><span class="code">+    return &UserService{repo: repo, cache: cache}</span></div>
-                <div class="diff-line ctx"><span class="ln">21</span><span class="code"> }</span></div>
+                <div class="diff-line del"><span class="ln">15</span><span class="c">-    db     *sql.DB</span></div>
+                <div class="diff-line del"><span class="ln">16</span><span class="c">-    cache  *redis.Client</span></div>
+                <div class="diff-line add"><span class="ln">15</span><span class="c">+    repo   UserRepo</span></div>
+                <div class="diff-line add"><span class="ln">16</span><span class="c">+    cache  Cache</span></div>
+                <div class="diff-line ctx"><span class="ln">17</span><span class="c"> }</span></div>
+                <div class="diff-line ctx"><span class="ln">18</span><span class="c"> </span></div>
+                <div class="diff-line del"><span class="ln">19</span><span class="c">-func NewUserService(db *sql.DB, cache *redis.Client) *UserService {</span></div>
+                <div class="diff-line del"><span class="ln">20</span><span class="c">-    return &UserService{db: db, cache: cache}</span></div>
+                <div class="diff-line add"><span class="ln">19</span><span class="c">+func NewUserService(repo UserRepo, cache Cache) *UserService {</span></div>
+                <div class="diff-line add"><span class="ln">20</span><span class="c">+    return &UserService{repo: repo, cache: cache}</span></div>
+                <div class="diff-line ctx"><span class="ln">21</span><span class="c"> }</span></div>
               </div>
             </div>
           </div>
@@ -898,38 +760,37 @@
       <div class="msg">
         <div class="msg-avatar agent">C</div>
         <div class="msg-body">
-          <div class="msg-header">
+          <div class="msg-head">
             <span class="msg-name">Claude Code</span>
             <span class="msg-time">14:33</span>
           </div>
           <div class="perm-card">
-            <div class="perm-header">
-              <div class="perm-icon">🔐</div>
-              <span class="perm-title">权限请求 — Write File</span>
+            <div class="perm-head">
+              <div class="perm-icon">🔒</div>
+              <span class="perm-title">Write File</span>
             </div>
-            <div class="perm-detail">internal/repo/user_repo.go</div>
+            <div class="perm-path">internal/repo/user_repo.go</div>
             <div class="perm-actions">
-              <button class="btn btn-primary">✓ Allow</button>
-              <button class="btn btn-danger">✕ Deny</button>
-              <button class="btn">Allow All</button>
+              <button class="btn btn-accent">Allow</button>
+              <button class="btn">Deny</button>
+              <button class="btn btn-ghost">Allow All</button>
             </div>
           </div>
         </div>
       </div>
 
-      <!-- Streaming message -->
+      <!-- Streaming -->
       <div class="msg">
         <div class="msg-avatar agent">C</div>
         <div class="msg-body">
-          <div class="msg-header">
+          <div class="msg-head">
             <span class="msg-name">Claude Code</span>
             <span class="msg-time">14:33</span>
           </div>
-          <div class="msg-content">
-            <p>文件已创建。接下来修改 <code style="font-family:var(--font-mono);font-size:12px;padding:2px 5px;background:var(--bg-code);border-radius:3px;">main.go</code> 里的依赖注入，把新的 Repo 接入到 Service...</p>
+          <div class="msg-text">
+            <p>文件已创建。接下来修改 <span class="inline-code">main.go</span> 里的依赖注入，把新的 Repo 接入到 Service...</p>
             <div class="streaming">
-              <div class="streaming-dots"><span></span><span></span><span></span></div>
-              <span>正在输出</span>
+              <div class="streaming-bar"></div>
             </div>
           </div>
         </div>
@@ -937,30 +798,28 @@
     </div>
 
     <!-- Composer -->
-    <div class="composer" style="position:relative;">
-      <div class="composer-inner">
-        <textarea class="composer-input" rows="1" placeholder="输入消息，/ 触发命令..."></textarea>
-        <div class="composer-actions">
-          <button class="composer-btn" title="Attach">📎</button>
-          <button class="composer-btn" title="Voice">🎤</button>
-          <button class="composer-btn send" title="Send">▶</button>
+    <div class="composer">
+      <div class="composer-box">
+        <textarea class="composer-input" rows="1" placeholder="Send a message..."></textarea>
+        <div class="composer-btns">
+          <button class="composer-btn" title="Attach file">📎</button>
+          <button class="composer-btn primary" title="Send">▶</button>
         </div>
       </div>
-      <div class="composer-hint">
-        <span><kbd class="kbd">/</kbd> 命令</span>
-        <span><kbd class="kbd">Enter</kbd> 发送</span>
-        <span><kbd class="kbd">Shift+Enter</kbd> 换行</span>
+      <div class="composer-hints">
+        <span><kbd class="kbd">/</kbd> commands</span>
+        <span><kbd class="kbd">Enter</kbd> send</span>
+        <span><kbd class="kbd">Shift+Enter</kbd> newline</span>
       </div>
     </div>
   </main>
 </div>
 
 <script>
-function setTheme(theme) {
-  document.documentElement.setAttribute('data-theme', theme);
-  document.querySelectorAll('.theme-toggle button').forEach(btn => {
-    btn.classList.toggle('active', btn.textContent.toLowerCase() === theme);
-  });
+function setTheme(t) {
+  document.documentElement.className = t;
+  document.querySelectorAll('.theme-toggle button').forEach(b =>
+    b.classList.toggle('active', b.textContent.trim().toLowerCase() === t));
 }
 </script>
 </body>
