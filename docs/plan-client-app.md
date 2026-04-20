@@ -29,14 +29,16 @@ CC-Connect 目前通过两种方式与用户交互：
 | 语音 | OpenAI/Sherpa STT + TTS | 复用现有 `[speech]` 配置 |
 | Agent 支持 | Claude Code / Codex / OpenCode | 10+ Agent（已有优势） |
 | IM 平台 | 无 | 12 平台（独有优势） |
+| 代码 Diff | 完整 split/unified diff viewer | Bridge 协议扩展支持（见下文） |
+| 文件浏览 | 完整文件树 | Phase 2 |
 
 ### 1.3 目标
 
 **Phase 1（MVP）：** 跨平台聊天客户端，通过 Bridge WebSocket 直连 cc-connect daemon，功能对齐 Paseo 的核心聊天体验。
 
-**Phase 2：** 远程 Relay 中继 + E2EE，支持不在同一局域网时安全访问。
+**Phase 2：** 远程 Relay + E2EE、代码 Diff 查看、文件浏览。
 
-**Phase 3：** 桌面 Electron 壳、语音输入、文件浏览等高级功能。
+**Phase 3：** 桌面 Electron 壳、语音输入等高级功能。
 
 ---
 
@@ -44,367 +46,610 @@ CC-Connect 目前通过两种方式与用户交互：
 
 ### 2.1 客户端框架：Expo + React Native
 
-**选择理由：**
-
-- **一套代码，三端运行**：iOS、Android、Web（`expo export --platform web`）
-- Paseo 同样选择了 Expo，验证了该方案在 AI Agent 客户端场景的可行性
-- cc-connect Web Admin 已使用 React + Vite + Tailwind，团队有 React 经验
-- Expo SDK 54+ 成熟稳定，OTA 更新、推送通知等开箱即用
+- **一套代码，三端运行**：iOS、Android、Web
+- Paseo 同选 Expo，验证了该方案在 AI Agent 客户端场景的可行性
+- cc-connect Web Admin 已使用 React，团队有经验
 - Web 导出可嵌入 Electron 做桌面版（Phase 3）
 
-**替代方案对比：**
+### 2.2 UI 风格
 
-| 方案 | 优点 | 缺点 | 结论 |
-|------|------|------|------|
-| **Expo (React Native)** | 跨平台、生态丰富、与现有 Web 技术栈一致 | 性能略逊原生 | ✅ 选用 |
-| Flutter | 性能好、UI 一致性强 | Dart 生态、团队无经验、与现有 React 不复用 | ❌ |
-| SwiftUI + Kotlin | 原生性能最优 | 双端开发、维护成本翻倍 | ❌ |
-| PWA (纯 Web) | 零安装 | 推送受限、无原生体验、不进应用商店 | ❌ 但 Web 版作为副产出 |
+**延续 Web Admin 的现有风格**（深色主题、Tailwind 色板、lucide 图标），同时参考 Paseo 的布局模式：
 
-### 2.2 通信协议：复用 Bridge WebSocket
+- Paseo：左侧 sidebar（host/项目/agent 列表）+ 中间 agent stream + 右侧 explorer（changes/files/PR）
+- 我们：简化版 — 左侧会话/项目列表（手机上为底部 tab 或侧滑抽屉）+ 中间聊天流 + 按需展开 diff/文件面板
 
-**核心思路：** 客户端作为一个 Bridge adapter 接入 cc-connect，复用现有 `core/bridge.go` 的全部能力。
+---
+
+## 3. 数据存储策略：不用 SQLite
+
+### 3.1 结论：AsyncStorage + 内存 Zustand，不引入 SQLite
+
+**理由：**
+
+Paseo 也不用 SQLite。它的方案是：
+- **消息历史**：内存中（Zustand store），从 daemon 拉取 + 实时推送，不本地持久化
+- **设置/布局/草稿**：AsyncStorage（轻量 key-value）
+- **附件二进制**：IndexedDB（仅 Web 端）
+
+我们的场景更简单——cc-connect daemon 已有完整的会话历史（`SessionStore` 的 `History` 字段），客户端只需做薄缓存。
+
+### 3.2 各类数据的存储方式
+
+| 数据类型 | 存储位置 | 说明 |
+|---------|---------|------|
+| **消息历史** | 内存 Zustand，数据源 = daemon | 连接时拉取最近 N 条，之后实时推送；断线重连时增量补齐 |
+| **连接信息** | AsyncStorage `cc-hosts` | `{host, port, token, name}[]`，支持多 Host |
+| **当前状态** | AsyncStorage `cc-active` | 上次活跃的 host/project/session，下次启动直接恢复 |
+| **UI 偏好** | AsyncStorage `cc-prefs` | 主题、语言、字体大小、diff 显示模式 |
+| **输入草稿** | AsyncStorage `cc-drafts` | 按 sessionKey 存未发送的输入框内容 |
+| **附件缓存** | 临时目录 / IndexedDB | 图片/文件的发送缓存，发完即清 |
+
+### 3.3 为什么不用 SQLite
+
+| 考量 | SQLite | AsyncStorage + 内存 |
+|------|--------|-------------------|
+| 消息历史查询 | 可本地全文搜索 | daemon 侧搜索，客户端只做展示缓存 |
+| 离线可用 | 可离线浏览历史 | 离线时无法与 Agent 交互，浏览历史意义不大 |
+| 复杂度 | 需要 schema 迁移、ORM | 零额外依赖 |
+| 包体积 | +1-2MB（expo-sqlite） | 0 |
+| Paseo 验证 | Paseo 也不用 | 已验证方案可行 |
+
+**例外：** 如果未来需要离线消息搜索或大量历史缓存，可以后期引入 SQLite 作为 L2 cache，不影响架构。
+
+---
+
+## 4. Bridge 协议分析：现有能力与缺口
+
+### 4.1 现有协议已满足的能力
+
+| 需求 | 现有消息类型 | 状态 |
+|------|------------|------|
+| 发送文本消息 | `message` (C→S) + `images[]` / `files[]` / `audio` | ✅ 完全满足 |
+| 接收文本回复 | `reply` (S→C) | ✅ |
+| 卡片（权限审批/模型选择等） | `card` (S→C) + `card_action` (C→S) | ✅ |
+| 内联按钮 | `buttons` (S→C) | ✅ |
+| 流式进度 | `preview_start` → `update_message` → `delete_message` | ✅ |
+| 输入指示 | `typing_start` / `typing_stop` | ✅ |
+| TTS 音频 | `audio` (S→C) | ✅ |
+| 可用命令列表 | `capabilities_snapshot` (S→C) | ✅ |
+| 心跳 | `ping` / `pong` | ✅ |
+| REST 会话管理 | `GET/POST /bridge/sessions`, `POST /bridge/sessions/switch` | ✅ |
+| Adapter 注册 | `register` + capabilities 声明 | ✅ |
+
+### 4.2 需要扩展的协议（缺口）
+
+#### 缺口 1：会话列表实时推送
+
+**现状：** 只有 REST API（`GET /bridge/sessions?session_key=...`），客户端需要轮询。
+**需要：** WebSocket 推送会话变更。
 
 ```
-┌──────────────────┐     WebSocket      ┌──────────────────┐
-│   Client App     │ ◄──────────────── │   cc-connect     │
-│  (Expo/RN)       │   /bridge/ws      │   daemon         │
-│                  │   JSON 协议        │                  │
-│  bridge adapter  │ ──────────────► │  BridgeServer    │
-│  (built-in)      │                    │  → Engine → Agent│
-└──────────────────┘                    └──────────────────┘
+新增出站消息：session_list_update
+{
+  "type": "session_list_update",
+  "session_key": "...",
+  "sessions": [{ "id": "...", "name": "...", "history_count": 10 }],
+  "active_id": "..."
+}
 ```
 
-**已有协议能力（无需新增）：**
+**触发时机：** 新建/删除/切换会话时，向同 session_key 的所有 adapter 广播。
 
-| 消息类型 | 方向 | 说明 |
-|---------|------|------|
-| `register` | C→S | 注册 adapter，声明 capabilities |
-| `message` | C→S | 发送文本/图片/文件/音频消息 |
-| `card_action` | C→S | 权限审批、按钮点击 |
-| `reply` | S→C | 文本回复 |
-| `card` | S→C | 卡片消息（Markdown、按钮、分割线等） |
-| `buttons` | S→C | 内联按钮 |
-| `preview_start` / `update_message` / `delete_message` | S→C | 流式进度（preview → update → finalize） |
-| `typing_start` / `typing_stop` | S→C | 输入指示 |
-| `audio` | S→C | TTS 音频 |
-| `capabilities_snapshot` | S→C | 可用命令列表 |
-| `ping` / `pong` | 双向 | 心跳 |
+#### 缺口 2：Agent 运行状态推送
 
-**需要扩展的协议：**
+**现状：** 客户端无法知道 Agent 当前是空闲、运行中还是等待权限。
+**需要：** 状态变更时推送。
 
-| 新增消息 | 方向 | 说明 |
-|---------|------|------|
-| `session_list` | S→C | 推送会话列表（替代 REST 轮询） |
-| `session_switched` | S→C | 会话切换通知 |
-| `history_sync` | S→C | 历史消息同步（首次连接或切换会话后） |
-| `project_list` | S→C | 推送项目列表 |
-| `status_update` | S→C | Agent 状态变更（idle/running/waiting_permission） |
-| `connection_offer` | 双向 | Relay 配对握手（Phase 2） |
+```
+新增出站消息：agent_status_update
+{
+  "type": "agent_status_update",
+  "session_key": "...",
+  "status": "running",       // idle | running | waiting_permission
+  "agent_type": "claudecode",
+  "project": "my-project"
+}
+```
 
-### 2.3 认证方式
+**触发时机：** Agent session 创建/结束、权限请求/响应时。
 
-**Phase 1（局域网）：**
-- 复用 Bridge Server 的 `token` 认证（Bearer token / X-Bridge-Token / query param）
-- 新增 QR 配对流程：daemon 展示 QR 码 → 客户端扫描获取 `{host, port, token}`
-- `cc-connect web` 页面增加 "连接客户端" 入口，展示 QR 码和连接信息
+#### 缺口 3：历史消息同步
 
-**Phase 2（远程）：**
-- Relay 中继服务器（可自建或使用官方托管）
-- E2EE 端到端加密（NaCl/X25519 密钥交换 + XSalsa20-Poly1305）
-- 连接 Offer 格式：`ccconnect://pair#offer=<base64url(json)>`
+**现状：** REST `GET /bridge/sessions/{id}?history_limit=50` 可以拉取，但无增量推送。
+**需要：** 连接时 / 切换会话时自动推送历史，之后增量推送新消息。
 
-### 2.4 项目结构
+```
+新增出站消息：history_sync
+{
+  "type": "history_sync",
+  "session_key": "...",
+  "session_id": "...",
+  "entries": [
+    { "role": "user", "content": "...", "timestamp": 1713456789 },
+    { "role": "assistant", "content": "...", "timestamp": 1713456800 }
+  ],
+  "has_older": true
+}
+
+新增入站消息：fetch_history
+{
+  "type": "fetch_history",
+  "session_key": "...",
+  "session_id": "...",
+  "before_timestamp": 1713456789,
+  "limit": 50
+}
+```
+
+#### 缺口 4：项目列表
+
+**现状：** 客户端不知道 daemon 上有哪些项目。
+**需要：** 注册成功后推送项目列表。
+
+```
+capabilities_snapshot 已有 projects[] 字段，只需扩展内容：
+{
+  "type": "capabilities_snapshot",
+  "projects": [
+    {
+      "project": "my-project",
+      "agent_type": "claudecode",
+      "work_dir": "/path/to/repo",
+      "commands": [...],
+      "status": "idle"
+    }
+  ]
+}
+```
+
+#### 缺口 5：代码 Diff 订阅（Phase 2）
+
+**现状：** Bridge 协议无 git diff 能力。
+**需要：** 参考 Paseo 的 `subscribe_checkout_diff` 模式。
+
+```
+新增入站消息：subscribe_diff
+{
+  "type": "subscribe_diff",
+  "session_key": "...",
+  "project": "..."
+}
+
+新增出站消息：diff_update
+{
+  "type": "diff_update",
+  "session_key": "...",
+  "project": "...",
+  "files": [
+    {
+      "path": "core/engine.go",
+      "is_new": false,
+      "is_deleted": false,
+      "additions": 15,
+      "deletions": 3,
+      "status": "ok",
+      "hunks": [
+        {
+          "old_start": 100, "old_count": 10,
+          "new_start": 100, "new_count": 22,
+          "lines": [
+            { "type": "context", "content": "func foo() {" },
+            { "type": "remove",  "content": "    old line" },
+            { "type": "add",     "content": "    new line" }
+          ]
+        }
+      ]
+    }
+  ]
+}
+```
+
+**实现方式：** daemon 在 Agent 会话的 `work_dir` 上执行 `git diff HEAD`，解析为结构化数据，推送给订阅者。使用 debounce（~500ms）避免频繁推送。
+
+### 4.3 协议扩展优先级
+
+| 优先级 | 消息 | Phase |
+|--------|------|-------|
+| P0 | `history_sync` / `fetch_history` | Phase 1 |
+| P0 | `agent_status_update` | Phase 1 |
+| P0 | `session_list_update` | Phase 1 |
+| P1 | `capabilities_snapshot` 扩展（project agent_type/work_dir） | Phase 1 |
+| P2 | `subscribe_diff` / `diff_update` | Phase 2 |
+| P2 | `file_explorer_request` / `file_explorer_response` | Phase 2 |
+| P3 | `register_push_token` | Phase 2 |
+
+---
+
+## 5. UI 页面结构与导航
+
+### 5.1 导航架构
+
+**手机端：** 底部 Tab Bar + 侧滑抽屉
+
+```
+┌─────────────────────────────────┐
+│  StatusBar (Agent 状态)          │
+├─────────────────────────────────┤
+│                                 │
+│       主内容区域                  │
+│  (聊天 / 项目列表 / 设置)         │
+│                                 │
+├─────────────────────────────────┤
+│  ◉ 项目  │  💬 聊天  │  ⚙️ 设置  │  ← 底部 Tab Bar
+└─────────────────────────────────┘
+```
+
+**平板/桌面 Web：** 左侧 Sidebar + 主内容
+
+```
+┌──────────┬──────────────────────────────────┐
+│ Sidebar  │  主内容                            │
+│          │                                    │
+│ 项目列表  │  聊天消息流                         │
+│ ────────│                                    │
+│ 会话列表  │  [消息1]                           │
+│  · chat1 │  [消息2]                           │
+│  · chat2 │  [消息3 - 流式中...]                │
+│  ────────│                                    │
+│ 连接状态  │  ┌──────────────────────────┐      │
+│          │  │ 输入框          📎 / ▶️   │      │
+│ [+新会话] │  └──────────────────────────┘      │
+└──────────┴──────────────────────────────────┘
+```
+
+### 5.2 底部 Tab Bar（手机端）
+
+| Tab | 图标 | 页面 | 说明 |
+|-----|------|------|------|
+| **项目** | `FolderOpen` | 项目列表 | 展示所有 project，每个显示 Agent 类型 + 状态指示灯 |
+| **聊天** | `MessageSquare` | 当前活跃聊天 | 主交互界面，顶部栏可切换会话 |
+| **设置** | `Settings` | 设置页 | 连接管理、语言、主题、关于 |
+
+### 5.3 各页面详细结构
+
+#### 页面 1：连接/配对（首次使用）
+
+```
+┌────────────────────────┐
+│     CC-Connect Logo    │
+│                        │
+│  ┌──────────────────┐  │
+│  │ 输入连接地址      │  │
+│  │ 192.168.1.100    │  │
+│  │ ──────────────── │  │
+│  │ 端口: 9810       │  │
+│  │ ──────────────── │  │
+│  │ Token: ••••••    │  │
+│  └──────────────────┘  │
+│                        │
+│     [ 连接 ]           │
+│                        │
+│   ─── 或 ───           │
+│                        │
+│  [ 📷 扫码配对 ]       │
+│                        │
+│  已保存的连接:          │
+│  · 🟢 家里 Mac         │
+│  · 🔴 公司服务器        │
+└────────────────────────┘
+```
+
+#### 页面 2：项目列表
+
+```
+┌────────────────────────┐
+│ 项目                🔗 │  ← 🔗 = 连接状态指示
+├────────────────────────┤
+│ ┌────────────────────┐ │
+│ │ 🟢 my-project      │ │  ← 绿点 = idle
+│ │ Claude Code        │ │  ← Agent 类型
+│ │ ~/code/my-repo     │ │  ← work_dir
+│ │ 3 sessions         │ │
+│ └────────────────────┘ │
+│ ┌────────────────────┐ │
+│ │ 🟡 data-analysis   │ │  ← 黄点 = running
+│ │ Codex              │ │
+│ │ ~/code/data        │ │
+│ │ 1 session          │ │
+│ └────────────────────┘ │
+│ ┌────────────────────┐ │
+│ │ 🔴 web-app         │ │  ← 红点 = waiting_permission
+│ │ Gemini CLI         │ │
+│ │ ~/code/web         │ │
+│ │ 2 sessions         │ │
+│ └────────────────────┘ │
+└────────────────────────┘
+```
+
+点击进入项目 → 聊天页面。
+
+#### 页面 3：聊天（核心页面）
+
+```
+┌───────────────────────────────┐
+│ ◀ my-project    [会话▾] [···] │  ← 顶部导航
+├───────────────────────────────┤  ← [会话▾] = 会话切换下拉
+│                               │  ← [···] = 更多菜单
+│  👤 帮我重构 UserService       │
+│                               │
+│  🤖 好的，我来分析一下...       │
+│  ```go                        │
+│  type UserService struct {    │
+│      repo UserRepo            │
+│  }                            │
+│  ```                          │
+│  ✅ 已修改 3 个文件             │
+│                               │
+│  ┌─────────────────────────┐  │
+│  │ 🔐 权限请求               │  │  ← 权限审批卡片
+│  │ Write: user_service.go   │  │
+│  │                          │  │
+│  │ [✅ Allow] [❌ Deny]      │  │
+│  │ [✅ Allow All]            │  │
+│  └─────────────────────────┘  │
+│                               │
+│  ⏳ Agent 运行中...            │  ← 状态指示
+│                               │
+├───────────────────────────────┤
+│ /  │ 输入消息...       📎 ▶️  │  ← 输入框
+└───────────────────────────────┘
+    ↑ 斜杠触发命令面板
+```
+
+**会话切换下拉菜单：**
+
+```
+┌───────────────────┐
+│ 会话列表           │
+│ ─────────────── │
+│ ● default         │  ← ● = 当前活跃
+│   chat-2          │
+│   refactor-task   │
+│ ─────────────── │
+│ [+ 新建会话]       │
+└───────────────────┘
+```
+
+**更多菜单 [···]：**
+
+```
+┌───────────────────┐
+│ /new 新建会话       │
+│ /model 切换模型     │
+│ /mode 权限模式      │
+│ /dir 工作目录       │
+│ /memory 记忆       │
+│ ─────────────── │
+│ 查看 Diff          │  ← Phase 2
+│ 文件浏览           │  ← Phase 2
+└───────────────────┘
+```
+
+**斜杠命令面板（输入 `/` 时弹出）：**
+
+```
+┌───────────────────────────┐
+│ 🔍 搜索命令...              │
+├───────────────────────────┤
+│ /new      新建会话          │
+│ /list     列出会话          │
+│ /switch   切换会话          │
+│ /model    切换模型          │
+│ /mode     权限模式          │
+│ /dir      工作目录          │
+│ /cron     定时任务          │
+│ /memory   Agent 记忆        │
+│ /provider 切换 Provider    │
+└───────────────────────────┘
+```
+
+命令列表从 `capabilities_snapshot.projects[].commands` 获取。
+
+#### 页面 4：Diff 查看（Phase 2）
+
+```
+┌───────────────────────────────┐
+│ ◀ 代码变更        unified ▾  │
+├───────────────────────────────┤
+│ core/engine.go  +15 -3        │
+│ ┌─────────────────────────┐   │
+│ │  100  100  func foo() { │   │
+│ │  101     - old line      │   │  ← 红色背景
+│ │       101 + new line     │   │  ← 绿色背景
+│ │  102  102  }             │   │
+│ └─────────────────────────┘   │
+│                               │
+│ core/i18n.go  +2 -0           │
+│ ┌─────────────────────────┐   │
+│ │  50   50   ...           │   │
+│ │       51 + new key       │   │
+│ │       52 + new value     │   │
+│ └─────────────────────────┘   │
+│                               │
+│ 📊 2 files changed            │
+│    +17 -3                     │
+└───────────────────────────────┘
+```
+
+---
+
+## 6. 代码 Diff 支持方案
+
+### 6.1 Paseo 的做法
+
+Paseo 通过 `CheckoutDiffManager` 在 daemon 侧 watch 文件变更，执行 `git diff`，解析成结构化数据（文件 → hunks → lines），推送给客户端。客户端用 `GitDiffPane` 组件渲染 split/unified 两种视图。
+
+### 6.2 我们的实现方案
+
+**服务端（Go）：** 在 Bridge 协议层新增 diff 订阅支持，复用 `work_dir` 下的 git 能力。
+
+```go
+// 执行 git diff 并解析为结构化数据
+func computeWorkspaceDiff(workDir string) (*DiffResult, error) {
+    // 1. exec: git diff HEAD --unified=3 --no-color
+    // 2. 解析 unified diff 格式为 DiffFile → DiffHunk → DiffLine
+    // 3. 标注 additions/deletions 统计
+    // 4. 大文件标记为 "too_large"，二进制标记为 "binary"
+}
+```
+
+**触发方式：**
+- **被动拉取：** 客户端发送 `subscribe_diff`，daemon 立即计算并返回当前 diff
+- **主动推送：** daemon 用 fsnotify watch `work_dir`，debounce 500ms 后推送 `diff_update`
+- **Agent 完成时：** Agent session 结束后自动推送一次最新 diff
+
+**客户端（React Native）：**
+- 使用自定义 `<DiffView>` 组件，参考 Paseo 的 `GitDiffPane`
+- 支持 unified / split 两种显示模式
+- 代码高亮复用 highlight.js（Web Admin 已用）
+- 文件折叠/展开、统计概览
+
+### 6.3 对齐 Paseo 的能力
+
+| Paseo Diff 功能 | 我们的实现 | Phase |
+|----------------|-----------|-------|
+| Working tree diff | `git diff HEAD` 推送 | Phase 2 |
+| Structured hunks + lines | 服务端 Go 解析 | Phase 2 |
+| Split / Unified 视图 | `<DiffView>` 组件 | Phase 2 |
+| 实时文件监控 | fsnotify + debounce | Phase 2 |
+| Syntax highlight tokens | highlight.js 客户端渲染 | Phase 2 |
+| PR timeline | 暂不支持（非核心场景） | Phase 3+ |
+| 文件浏览器 | `file_explorer` 协议 | Phase 2 |
+
+---
+
+## 7. 项目结构
 
 ```
 cc-connect/
-├── client/                      # 新增：客户端 monorepo
-│   ├── package.json             # workspace root
+├── client/                       # 新增：客户端 monorepo
+│   ├── package.json              # workspace root
 │   ├── apps/
-│   │   ├── mobile/              # Expo app (iOS/Android/Web)
+│   │   ├── mobile/               # Expo app (iOS/Android/Web)
 │   │   │   ├── app.json
 │   │   │   ├── src/
-│   │   │   │   ├── app/         # expo-router 页面
-│   │   │   │   ├── components/  # UI 组件
-│   │   │   │   ├── hooks/       # 自定义 hooks
-│   │   │   │   ├── lib/         # bridge client, store
-│   │   │   │   └── i18n/        # 多语言
+│   │   │   │   ├── app/          # expo-router 页面
+│   │   │   │   │   ├── _layout.tsx
+│   │   │   │   │   ├── index.tsx       # → 连接页或项目列表
+│   │   │   │   │   ├── pair.tsx        # QR 扫描配对
+│   │   │   │   │   ├── (tabs)/
+│   │   │   │   │   │   ├── _layout.tsx # 底部 Tab Bar
+│   │   │   │   │   │   ├── projects.tsx
+│   │   │   │   │   │   ├── chat.tsx
+│   │   │   │   │   │   └── settings.tsx
+│   │   │   │   │   └── project/
+│   │   │   │   │       ├── [name]/
+│   │   │   │   │       │   ├── chat.tsx
+│   │   │   │   │       │   ├── sessions.tsx
+│   │   │   │   │       │   └── diff.tsx    # Phase 2
+│   │   │   │   ├── components/
+│   │   │   │   │   ├── ChatView.tsx        # 消息列表 + Markdown
+│   │   │   │   │   ├── Composer.tsx        # 输入框 + 命令面板
+│   │   │   │   │   ├── PermissionCard.tsx  # 权限审批卡片
+│   │   │   │   │   ├── SessionSwitcher.tsx # 会话切换下拉
+│   │   │   │   │   ├── CommandPalette.tsx  # 斜杠命令
+│   │   │   │   │   ├── StatusBar.tsx       # Agent 状态
+│   │   │   │   │   ├── DiffView.tsx        # 代码 Diff (Phase 2)
+│   │   │   │   │   ├── ProjectCard.tsx     # 项目卡片
+│   │   │   │   │   └── ConnectionSetup.tsx # 连接配置
+│   │   │   │   ├── lib/
+│   │   │   │   │   ├── bridge-client.ts    # WebSocket 客户端
+│   │   │   │   │   ├── protocol.ts         # 消息类型 (对齐 Go)
+│   │   │   │   │   └── markdown.ts         # Markdown 渲染配置
+│   │   │   │   ├── store/
+│   │   │   │   │   ├── connection.ts       # 连接状态
+│   │   │   │   │   ├── projects.ts         # 项目列表
+│   │   │   │   │   ├── sessions.ts         # 会话管理
+│   │   │   │   │   ├── messages.ts         # 消息缓存
+│   │   │   │   │   └── preferences.ts      # 用户偏好
+│   │   │   │   ├── hooks/
+│   │   │   │   │   ├── useBridge.ts        # Bridge 连接 hook
+│   │   │   │   │   ├── useChat.ts          # 聊天消息 hook
+│   │   │   │   │   └── useDiff.ts          # Diff 订阅 hook (Phase 2)
+│   │   │   │   └── i18n/                   # 多语言 (5 语言)
 │   │   │   └── package.json
-│   │   └── desktop/             # Electron shell (Phase 3)
-│   │       └── package.json
-│   └── packages/
-│       ├── bridge-client/       # 共享 Bridge WebSocket 客户端
-│       │   ├── src/
-│       │   │   ├── client.ts    # DaemonClient 类
-│       │   │   ├── protocol.ts  # 消息类型定义 (与 Go 对齐)
-│       │   │   └── store.ts     # 状态管理 (Zustand)
-│       │   └── package.json
-│       └── ui/                  # 共享 UI 组件 (Phase 3)
-│           └── package.json
+│   │   └── desktop/                # Electron shell (Phase 3)
+│   └── packages/                   # 未来可抽共享包
 ├── core/
-│   └── bridge.go                # 现有，需少量扩展
-├── web/                         # 现有 Web Admin
+│   └── bridge.go                   # 现有，需扩展
+├── web/                            # 现有 Web Admin (保留)
 └── ...
 ```
 
 ---
 
-## 3. 功能规划
+## 8. 服务端改动清单
 
-### Phase 1 — MVP 聊天客户端（4-6 周）
+### Phase 1 改动
 
-**核心页面：**
+| 文件 | 改动 | 工作量 |
+|------|------|--------|
+| `core/bridge.go` | 新增 `session_list_update` 出站消息 | 小 |
+| `core/bridge.go` | 新增 `agent_status_update` 出站消息 | 小 |
+| `core/bridge.go` | 新增 `history_sync` / `fetch_history` 消息对 | 中 |
+| `core/bridge_capabilities.go` | 扩展 snapshot 加入 agent_type / work_dir / status | 小 |
+| `core/engine.go` | 在会话变更时触发 `session_list_update` 广播 | 小 |
+| `core/engine.go` | 在 Agent 状态变更时触发 `agent_status_update` | 中 |
+| `core/management.go` | 新增 `GET /api/v1/pair/qrcode` 接口 | 小 |
 
-| 页面 | 功能 |
-|------|------|
-| **连接/配对** | 输入地址 + token，或扫描 QR 码连接 daemon |
-| **项目列表** | 展示所有 project，显示 Agent 类型和状态 |
-| **聊天** | 主交互界面，发送文本、接收 Markdown 回复 |
-| **会话管理** | 新建/切换/删除会话 |
-| **权限审批** | 卡片式权限请求，一键 Allow / Deny / Allow All |
-| **设置** | 连接管理、语言切换、主题切换 |
+### Phase 2 改动
 
-**UI 交互：**
-
-- Markdown 渲染（代码高亮、表格、列表）
-- 流式输出动画（打字机效果 + 进度指示）
-- 卡片渲染（权限请求、模型选择、会话列表等）
-- 斜杠命令快捷输入（`/new`、`/model`、`/mode` 等，从 capabilities_snapshot 获取）
-- 深色/浅色主题
-- 多语言（复用 cc-connect 的 5 语言体系）
-
-**对齐 Paseo 的关键体验：**
-
-| Paseo 功能 | CC-Connect 实现方式 |
-|-----------|-------------------|
-| 多 Agent 聊天 | 多项目选择，每个项目绑定不同 Agent |
-| 流式回复 | Bridge `preview_start` + `update_message` |
-| 权限审批 | Bridge `card_action` + `perm:allow/deny` |
-| 代码高亮 | react-native-markdown + highlight.js |
-| 多设备同步 | 同一 Bridge token 多端连接，会话共享 |
-| 图片发送 | Bridge `images[]` base64 |
-| 语音输入 | Bridge `audio` + `[speech]` 配置 |
-
-### Phase 2 — 远程访问与安全（2-3 周）
-
-- Relay 中继服务器（Go 实现，可自建或托管）
-- E2EE 端到端加密（X25519 密钥交换）
-- 连接 Offer QR 码（含 relay endpoint + public key）
-- 推送通知（Expo Push + 权限审批/任务完成提醒）
-- 离线消息缓存
-
-### Phase 3 — 高级功能（持续迭代）
-
-- Electron 桌面壳（加载 Expo Web 导出）
-- 语音对话模式（实时 STT → Agent → TTS）
-- 文件浏览器（远程查看 work_dir 文件）
-- 多 Host 管理（同时连接多台机器上的 cc-connect）
-- Widget / 快捷方式（iOS Widget、Android 快捷方式）
-- App Store / Google Play 发布
+| 文件 | 改动 | 工作量 |
+|------|------|--------|
+| `core/bridge.go` | 新增 `subscribe_diff` / `diff_update` 消息对 | 中 |
+| `core/bridge_diff.go`（新） | diff 计算：`git diff` 执行 + unified diff 解析 | 大 |
+| `core/bridge_diff.go`（新） | fsnotify watch + debounce 推送 | 中 |
+| `core/bridge.go` | 新增 `file_explorer_request/response` | 中 |
 
 ---
 
-## 4. 服务端改动
+## 9. 里程碑与排期
 
-### 4.1 Bridge 协议扩展
-
-需要在 `core/bridge.go` 中新增以下出站消息类型：
-
-```go
-// 新增出站消息
-type bridgeSessionList struct {
-    Type       string              `json:"type"` // "session_list"
-    SessionKey string              `json:"session_key"`
-    Sessions   []bridgeSessionInfo `json:"sessions"`
-    ActiveID   string              `json:"active_id"`
-}
-
-type bridgeSessionInfo struct {
-    ID           string `json:"id"`
-    Name         string `json:"name"`
-    HistoryCount int    `json:"history_count"`
-}
-
-type bridgeStatusUpdate struct {
-    Type       string `json:"type"` // "status_update"
-    SessionKey string `json:"session_key"`
-    Status     string `json:"status"` // "idle", "running", "waiting_permission"
-    AgentType  string `json:"agent_type"`
-}
-
-type bridgeHistorySync struct {
-    Type       string              `json:"type"` // "history_sync"
-    SessionKey string              `json:"session_key"`
-    SessionID  string              `json:"session_id"`
-    History    []bridgeHistoryItem `json:"history"`
-}
-
-type bridgeHistoryItem struct {
-    Role    string `json:"role"`
-    Content string `json:"content"`
-}
-```
-
-### 4.2 QR 配对
-
-在 Management API（Web Admin 后端）新增：
-
-```
-GET /api/v1/pair/qrcode   → 返回 { url, token, host, port } 供 QR 渲染
-```
-
-客户端扫描 QR 后自动填入连接信息。
-
-### 4.3 推送通知支持（Phase 2）
-
-新增 `register_push_token` 入站消息，daemon 存储 token，在权限请求/任务完成时发送推送。
-
----
-
-## 5. 客户端核心模块设计
-
-### 5.1 BridgeClient（packages/bridge-client）
-
-```typescript
-class BridgeClient {
-  // 连接管理
-  connect(url: string, token: string): Promise<void>
-  disconnect(): void
-  get connected(): boolean
-
-  // 注册（连接后自动调用）
-  private register(): void
-  // capabilities: ["card", "buttons", "preview", "update_message",
-  //                "delete_message", "typing", "audio", "reconstruct_reply"]
-
-  // 发送
-  sendMessage(sessionKey: string, content: string, images?: ImageData[], files?: FileData[]): void
-  sendCardAction(sessionKey: string, action: string, replyCtx: string): void
-
-  // 事件
-  on(event: 'reply', handler: (msg: ReplyMessage) => void): void
-  on(event: 'card', handler: (msg: CardMessage) => void): void
-  on(event: 'preview_start', handler: (msg: PreviewMessage) => void): void
-  on(event: 'update_message', handler: (msg: UpdateMessage) => void): void
-  on(event: 'typing', handler: (typing: boolean) => void): void
-  on(event: 'status', handler: (status: StatusUpdate) => void): void
-  on(event: 'session_list', handler: (list: SessionList) => void): void
-  on(event: 'capabilities', handler: (snapshot: CapabilitiesSnapshot) => void): void
-  on(event: 'disconnect', handler: () => void): void
-
-  // 心跳 & 重连
-  private startPingLoop(): void
-  private reconnect(): void
-}
-```
-
-### 5.2 状态管理（Zustand）
-
-```typescript
-interface AppStore {
-  // 连接
-  connection: { host: string; token: string; status: 'disconnected' | 'connecting' | 'connected' }
-
-  // 项目
-  projects: Project[]
-  activeProject: string | null
-
-  // 会话
-  sessions: Record<string, Session[]>     // sessionKey → sessions
-  activeSessionId: Record<string, string> // sessionKey → active session id
-
-  // 消息（按 session 分组）
-  messages: Record<string, ChatMessage[]>
-
-  // Agent 状态
-  agentStatus: Record<string, 'idle' | 'running' | 'waiting_permission'>
-
-  // 命令列表
-  commands: Record<string, PublishedCommand[]> // project → commands
-}
-```
-
-### 5.3 页面路由（expo-router）
-
-```
-/                           → 连接页（无已保存连接）或项目列表
-/pair                       → QR 扫描配对
-/settings                   → 连接管理、语言、主题
-/project/[name]             → 项目主页（会话列表）
-/project/[name]/chat        → 聊天界面
-/project/[name]/sessions    → 会话管理
-```
-
----
-
-## 6. UI 设计原则
-
-### 6.1 设计风格
-
-- **深色优先**（AI/开发工具的标准视觉），支持浅色主题
-- **紧凑信息密度**（代码/日志场景友好）
-- 底部导航（项目列表 / 聊天 / 设置）
-- 卡片式权限审批（醒目的 Allow / Deny 按钮）
-- Mono 字体用于代码块、命令输出
-
-### 6.2 核心 UI 组件
-
-| 组件 | 说明 |
-|------|------|
-| `<ChatView>` | 消息列表 + Markdown 渲染 + 流式动画 |
-| `<Composer>` | 输入框 + 斜杠命令选择器 + 附件按钮 |
-| `<PermissionCard>` | 工具调用权限审批卡片 |
-| `<SessionSwitcher>` | 会话列表抽屉 |
-| `<ConnectionSetup>` | 连接配置 / QR 扫描 |
-| `<StatusBar>` | Agent 状态指示（运行中/等待/空闲） |
-| `<CommandPalette>` | 斜杠命令快速选择 |
-
----
-
-## 7. 与 Paseo 的差异化优势
-
-| 优势维度 | CC-Connect 客户端 | 说明 |
-|---------|-------------------|------|
-| **双模式接入** | IM + 原生客户端 | Paseo 只有原生客户端；我们两者兼得 |
-| **Agent 数量** | 10+ Agent + ACP | Paseo 仅 3 种（Claude Code/Codex/OpenCode） |
-| **零改造成本** | 复用 Bridge 协议 | 已有 bridge adapter 生态无需适配 |
-| **IM 平台** | 12 平台 | Paseo 无 IM 平台支持 |
-| **定时任务** | 聊天内 /cron | Paseo 的 schedules 需要 UI 配置 |
-| **多项目** | 一个进程多项目 | 架构天然支持 |
-| **开源协议** | MIT | Paseo 是 AGPL-3.0 |
-
----
-
-## 8. 里程碑与排期
-
-| 阶段 | 内容 | 预估时间 |
-|------|------|---------|
-| **M0** | 本文档 Review & 确认技术方案 | 1 周 |
-| **M1** | bridge-client 包 + Expo 项目脚手架 | 1 周 |
-| **M2** | 连接/配对页 + 项目列表页 | 1 周 |
-| **M3** | 聊天核心：消息收发 + Markdown 渲染 + 流式 | 2 周 |
-| **M4** | 权限审批 + 卡片渲染 + 斜杠命令 | 1 周 |
-| **M5** | 会话管理 + 多语言 + 主题 + 打磨 | 1 周 |
-| **M6** | TestFlight / 内测 APK 发布 | — |
-| **P2** | Relay + E2EE + 推送通知 | 2-3 周 |
+| 阶段 | 内容 | 预估 |
+|------|------|------|
+| **M0** | 方案 Review 确认 | 1 周 |
+| **M1** | Expo 脚手架 + bridge-client + 连接/配对页 | 1 周 |
+| **M2** | 项目列表页 + 服务端 capabilities_snapshot 扩展 | 1 周 |
+| **M3** | 聊天核心：消息收发 + Markdown + 流式 + 状态推送 | 2 周 |
+| **M4** | 权限审批卡片 + 斜杠命令面板 + 会话管理 | 1 周 |
+| **M5** | 多语言 + 主题 + 多 Host + 打磨 | 1 周 |
+| **M6** | TestFlight / 内测 APK | — |
+| **P2-1** | Diff 服务端（git diff 解析 + fsnotify watch） | 1-2 周 |
+| **P2-2** | Diff 客户端（DiffView 组件 + 订阅） | 1 周 |
+| **P2-3** | Relay + E2EE + 推送通知 | 2-3 周 |
 | **P3** | Electron + 语音 + 文件浏览 | 持续 |
 
 ---
 
-## 9. 开放问题
+## 10. 与 Paseo 的差异化优势
 
-1. **Relay 是否自建？** 还是先用第三方 TURN/STUN 做穿透？自建 Relay 成本如何？
-2. **Web Admin 是否迁移到 Expo Web？** 长期看，Expo Web 导出是否能替代现有 Vite Web Admin？还是保持两套？
-3. **推送通知的权限审批超时策略？** 用户未响应推送时，Agent 是自动 deny 还是保持等待？
-4. **客户端应用商店名称？** "CC-Connect" 还是另取名？
-5. **是否支持多 Host？** 手机上同时连接家里和公司的 cc-connect 实例？
+| 维度 | CC-Connect | Paseo |
+|------|-----------|-------|
+| **双模式** | IM 平台 + 原生客户端 | 仅原生客户端 |
+| **Agent 数量** | 10+ Agent + ACP | 3 种 |
+| **IM 平台** | 12 平台 | 无 |
+| **定时任务** | /cron 自然语言 | UI 配置 |
+| **多项目** | 一进程多项目 | 一 daemon 多 workspace |
+| **开源协议** | MIT | AGPL-3.0 |
+| **代码 Diff** | Phase 2 支持 | 已有 |
+| **终端** | 不做（定位不同） | 有 |
 
 ---
 
-## 10. 参考资料
+## 11. 开放问题
 
-- [Paseo 项目](https://paseo.sh) — 竞品参考
-- [Expo 文档](https://docs.expo.dev) — 客户端框架
-- [CC-Connect Bridge 协议](../core/bridge.go) — 现有 WebSocket 协议
-- [CC-Connect Web Admin](../web/) — 现有 Web 前端
-- [TweetNaCl](https://tweetnacl.js.org) — E2EE 加密库参考
+1. ~~需不需要 SQLite？~~ → **不需要**，AsyncStorage + 内存 Zustand
+2. **Web Admin 是否长期迁移到 Expo Web？** 还是保持两套（Admin 管配置，Client 管聊天）？
+3. **Relay 自建 vs 第三方穿透？** 自建成本如何评估？
+4. **推送通知超时策略？** 用户未响应时 Agent 行为？
+5. **Diff 的 fsnotify 性能：** 大仓库 watch 是否有性能问题？是否需要 `.gitignore` 过滤？
+6. **多 Host 管理的 UX：** 手机上如何优雅切换多台机器？
+
+---
+
+## 12. 参考
+
+- [Paseo](https://paseo.sh) — 竞品
+- [Expo 文档](https://docs.expo.dev)
+- [CC-Connect Bridge 协议](../core/bridge.go)
+- [CC-Connect Web Admin](../web/)
