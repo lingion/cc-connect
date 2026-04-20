@@ -4177,6 +4177,44 @@ func TestCmdQuiet_TogglesDisplay(t *testing.T) {
 	}
 }
 
+func TestCmdQuietGlobal_PersistsToConfig(t *testing.T) {
+	p := &stubPlatformEngine{n: "test"}
+	e := NewEngine("test", &stubAgent{}, []Platform{p}, "", LangEnglish)
+	e.SetDisplayConfig(DisplayCfg{ThinkingMessages: true, ToolMessages: true, ThinkingMaxLen: 300, ToolMaxLen: 500})
+	msg := &Message{SessionKey: "test:user1", ReplyCtx: "ctx"}
+
+	var savedTM, savedTool *bool
+	e.SetDisplaySaveFunc(func(tm *bool, _ *int, _ *int, tool *bool) error {
+		savedTM = tm
+		savedTool = tool
+		return nil
+	})
+
+	// /quiet global: should persist
+	e.cmdQuiet(p, msg, []string{"global"})
+	if savedTM == nil || savedTool == nil {
+		t.Fatal("displaySaveFunc not called for /quiet global")
+	}
+	if *savedTM != false || *savedTool != false {
+		t.Fatalf("saved values: tm=%v tool=%v, want both false", *savedTM, *savedTool)
+	}
+	if len(p.sent) != 1 || !strings.Contains(p.sent[0], "Global quiet mode ON") {
+		t.Fatalf("sent = %q, want global quiet ON message", p.sent)
+	}
+
+	// /quiet (no global): should NOT persist
+	savedTM = nil
+	savedTool = nil
+	p.sent = nil
+	e.cmdQuiet(p, msg, nil)
+	if savedTM != nil || savedTool != nil {
+		t.Fatal("displaySaveFunc should not be called for /quiet without global")
+	}
+	if len(p.sent) != 1 || !strings.Contains(p.sent[0], "Quiet mode OFF") {
+		t.Fatalf("sent = %q, want quiet OFF message", p.sent)
+	}
+}
+
 func TestHandleMessage_ExtraContentPreservedThroughAlias(t *testing.T) {
 	p := &stubPlatformEngine{n: "test"}
 	agent := &stubAgent{}

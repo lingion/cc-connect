@@ -6266,22 +6266,34 @@ func (e *Engine) applyLiveModeChange(sessionKey, mode string) bool {
 func (e *Engine) cmdQuiet(p Platform, msg *Message, args []string) {
 	// /quiet toggles both ThinkingMessages and ToolMessages.
 	// Quiet ON = both hidden; Quiet OFF = both shown.
+	// /quiet global — toggle and persist to config.toml.
+	// /quiet (no args) — toggle for current session only (not persisted).
+	isGlobal := len(args) > 0 && strings.EqualFold(args[0], "global")
+
 	isQuiet := e.display.ThinkingMessages || e.display.ToolMessages
 	e.display.ThinkingMessages = !isQuiet
 	e.display.ToolMessages = !isQuiet
 
-	if e.displaySaveFunc != nil {
+	if isGlobal && e.displaySaveFunc != nil {
 		tm := e.display.ThinkingMessages
 		tool := e.display.ToolMessages
 		if err := e.displaySaveFunc(&tm, nil, nil, &tool); err != nil {
-			slog.Error("failed to persist display config after /quiet", "error", err)
+			slog.Error("failed to persist display config after /quiet global", "error", err)
 		}
 	}
 
 	if isQuiet {
-		e.reply(p, msg.ReplyCtx, e.i18n.T(MsgQuietOn))
+		if isGlobal {
+			e.reply(p, msg.ReplyCtx, e.i18n.T(MsgQuietGlobalOn))
+		} else {
+			e.reply(p, msg.ReplyCtx, e.i18n.T(MsgQuietOn))
+		}
 	} else {
-		e.reply(p, msg.ReplyCtx, e.i18n.T(MsgQuietOff))
+		if isGlobal {
+			e.reply(p, msg.ReplyCtx, e.i18n.T(MsgQuietGlobalOff))
+		} else {
+			e.reply(p, msg.ReplyCtx, e.i18n.T(MsgQuietOff))
+		}
 	}
 }
 
