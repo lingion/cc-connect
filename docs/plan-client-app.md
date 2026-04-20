@@ -32,13 +32,37 @@ CC-Connect 目前通过两种方式与用户交互：
 | 代码 Diff | 完整 split/unified diff viewer | Bridge 协议扩展支持（见下文） |
 | 文件浏览 | 完整文件树 | Phase 2 |
 
+### 1.2b 竞品参考：Happy Coder
+
+| 维度 | Happy Coder | CC-Connect（目标） |
+|------|------------|-------------------|
+| 核心定位 | Claude Code / Codex 专用远程控制客户端 | 通用 Agent 桥接 + 原生客户端 |
+| 客户端 | Expo (iOS/Android/Web) + Tauri (桌面) | Expo + Electron（后期） |
+| 通信 | HTTPS + Socket.IO → 中心服务器 | 直连 Bridge WebSocket（无中心） |
+| 安全 | E2E 加密（AES-256-GCM），服务器看不到明文 | Phase 2 E2EE |
+| 推送通知 | 权限请求/完成/错误推送到手机 | Phase 2 |
+| Agent | Claude Code / Codex / Gemini / OpenClaw / ACP | 10+ Agent + ACP（更广） |
+| IM 平台 | 无 | 12 平台（独有优势） |
+| 远程控制 | Daemon + RPC（手机可远程启动会话） | Bridge 协议天然支持 |
+| 语音 | ElevenLabs + LiveKit | 复用 `[speech]` |
+| 自动化 CLI | `happy-agent`（headless 控制） | `cc-connect send` 已有基础 |
+
+**从 Happy 可借鉴的关键点：**
+
+1. **推送通知**：权限请求 / Agent 完成 / 错误时推送到手机，这是移动端刚需
+2. **QR 配对体验**：CLI 展示 QR → 手机扫描 → 自动连接，极其顺滑
+3. **Session-first 导航**：会话是一等公民，每个会话有文件/信息/权限子页
+4. **Tablet 分屏**：iPad/平板上常驻左侧抽屉，手机上隐藏为侧滑
+5. **E2E 加密**：服务器看不到明文消息，对代码安全敏感的用户是卖点
+6. **Daemon RPC 模式**：手机可以远程操控机器上的 Agent（不只是看，还能启动/停止）
+
 ### 1.3 目标
 
 **Phase 1（MVP）：** 跨平台聊天客户端，通过 Bridge WebSocket 直连 cc-connect daemon，功能对齐 Paseo 的核心聊天体验。
 
-**Phase 2：** 远程 Relay + E2EE、代码 Diff 查看、文件浏览。
+**Phase 2：** 远程 Relay + E2EE、代码 Diff 查看、文件浏览、推送通知。
 
-**Phase 3：** 桌面 Electron 壳、语音输入等高级功能。
+**Phase 3：** 桌面 Tauri/Electron 壳、语音输入、Daemon RPC 远程控制。
 
 ---
 
@@ -256,7 +280,7 @@ capabilities_snapshot 已有 projects[] 字段，只需扩展内容：
 | P1 | `capabilities_snapshot` 扩展（project agent_type/work_dir） | Phase 1 |
 | P2 | `subscribe_diff` / `diff_update` | Phase 2 |
 | P2 | `file_explorer_request` / `file_explorer_response` | Phase 2 |
-| P3 | `register_push_token` | Phase 2 |
+| P2 | `register_push_token` + `push_notification` | Phase 2 |
 
 ---
 
@@ -623,16 +647,20 @@ cc-connect/
 
 ## 10. 与 Paseo 的差异化优势
 
-| 维度 | CC-Connect | Paseo |
-|------|-----------|-------|
-| **双模式** | IM 平台 + 原生客户端 | 仅原生客户端 |
-| **Agent 数量** | 10+ Agent + ACP | 3 种 |
-| **IM 平台** | 12 平台 | 无 |
-| **定时任务** | /cron 自然语言 | UI 配置 |
-| **多项目** | 一进程多项目 | 一 daemon 多 workspace |
-| **开源协议** | MIT | AGPL-3.0 |
-| **代码 Diff** | Phase 2 支持 | 已有 |
-| **终端** | 不做（定位不同） | 有 |
+| 维度 | CC-Connect | Paseo | Happy Coder |
+|------|-----------|-------|-------------|
+| **双模式** | IM 平台 + 原生客户端 | 仅原生客户端 | 仅原生客户端 |
+| **Agent 数量** | 10+ Agent + ACP | 3 种 | 5 种 + ACP |
+| **IM 平台** | 12 平台 | 无 | 无 |
+| **定时任务** | /cron 自然语言 | UI 配置 | 无 |
+| **多项目** | 一进程多项目 | 一 daemon 多 workspace | 多 session |
+| **E2E 加密** | Phase 2 | Relay 可选 E2EE | 全量 E2E |
+| **推送通知** | Phase 2 | 有 | 有 |
+| **代码 Diff** | Phase 2 | 完整 split/unified | 无 |
+| **远程 RPC** | Phase 3 | Relay 模式 | Daemon + RPC |
+| **语音** | 已有 speech 配置 | STT + TTS | ElevenLabs |
+| **桌面** | Phase 3 | Electron | Tauri |
+| **开源协议** | MIT | AGPL-3.0 | MIT |
 
 ---
 

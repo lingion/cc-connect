@@ -1,0 +1,967 @@
+<!DOCTYPE html>
+<html lang="zh" data-theme="dark">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>CC-Connect Client — UI Reference</title>
+<style>
+  :root {
+    --font-sans: -apple-system, BlinkMacSystemFont, 'Inter', 'Segoe UI', 'Noto Sans SC', sans-serif;
+    --font-mono: 'SF Mono', 'Fira Code', 'JetBrains Mono', 'Consolas', monospace;
+    --radius-sm: 6px;
+    --radius-md: 10px;
+    --radius-lg: 14px;
+    --radius-xl: 18px;
+    --transition: 180ms ease;
+  }
+
+  [data-theme="dark"] {
+    --bg-root: #0c0c0e;
+    --bg-sidebar: #111114;
+    --bg-main: #16161a;
+    --bg-card: #1c1c21;
+    --bg-input: #1c1c21;
+    --bg-hover: #22222a;
+    --bg-active: #2a2a35;
+    --bg-badge: rgba(99,102,241,0.15);
+    --bg-code: #1a1a20;
+    --border: #27272e;
+    --border-light: #1f1f26;
+    --text-primary: #e8e8ed;
+    --text-secondary: #8b8b9a;
+    --text-tertiary: #55555f;
+    --text-inverse: #0c0c0e;
+    --accent: #6366f1;
+    --accent-hover: #7577f5;
+    --accent-muted: rgba(99,102,241,0.12);
+    --green: #22c55e;
+    --green-muted: rgba(34,197,94,0.12);
+    --yellow: #eab308;
+    --yellow-muted: rgba(234,179,8,0.12);
+    --red: #ef4444;
+    --red-muted: rgba(239,68,68,0.12);
+    --orange: #f97316;
+    --diff-add-bg: rgba(34,197,94,0.08);
+    --diff-add-text: #4ade80;
+    --diff-del-bg: rgba(239,68,68,0.08);
+    --diff-del-text: #f87171;
+    --shadow: 0 1px 3px rgba(0,0,0,0.4);
+  }
+
+  [data-theme="light"] {
+    --bg-root: #f5f5f7;
+    --bg-sidebar: #ffffff;
+    --bg-main: #fafafa;
+    --bg-card: #ffffff;
+    --bg-input: #f0f0f3;
+    --bg-hover: #ececf0;
+    --bg-active: #e4e4ea;
+    --bg-badge: rgba(99,102,241,0.08);
+    --bg-code: #f4f4f8;
+    --border: #e2e2e8;
+    --border-light: #ededf0;
+    --text-primary: #1a1a1e;
+    --text-secondary: #6b6b7a;
+    --text-tertiary: #9b9baa;
+    --text-inverse: #ffffff;
+    --accent: #4f46e5;
+    --accent-hover: #4338ca;
+    --accent-muted: rgba(79,70,229,0.08);
+    --green: #16a34a;
+    --green-muted: rgba(22,163,74,0.08);
+    --yellow: #ca8a04;
+    --yellow-muted: rgba(202,138,4,0.08);
+    --red: #dc2626;
+    --red-muted: rgba(220,38,38,0.08);
+    --orange: #ea580c;
+    --diff-add-bg: rgba(22,163,74,0.06);
+    --diff-add-text: #16a34a;
+    --diff-del-bg: rgba(220,38,38,0.06);
+    --diff-del-text: #dc2626;
+    --shadow: 0 1px 3px rgba(0,0,0,0.08);
+  }
+
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  body {
+    font-family: var(--font-sans);
+    background: var(--bg-root);
+    color: var(--text-primary);
+    -webkit-font-smoothing: antialiased;
+    line-height: 1.5;
+    min-height: 100vh;
+  }
+
+  /* ─── Layout Shell ─── */
+  .app-shell {
+    display: flex;
+    height: 100vh;
+    overflow: hidden;
+  }
+
+  .sidebar {
+    width: 280px;
+    min-width: 280px;
+    background: var(--bg-sidebar);
+    border-right: 1px solid var(--border);
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+  }
+
+  .sidebar-header {
+    padding: 16px 16px 12px;
+    border-bottom: 1px solid var(--border-light);
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+  }
+
+  .sidebar-brand {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+
+  .brand-dot {
+    width: 10px; height: 10px;
+    border-radius: 50%;
+    background: linear-gradient(135deg, var(--accent), var(--green));
+    box-shadow: 0 0 8px rgba(99,102,241,0.3);
+  }
+
+  .brand-name {
+    font-size: 14px;
+    font-weight: 600;
+    letter-spacing: -0.3px;
+  }
+
+  .sidebar-actions {
+    display: flex;
+    gap: 4px;
+  }
+
+  .icon-btn {
+    width: 30px; height: 30px;
+    border: none;
+    background: transparent;
+    color: var(--text-secondary);
+    border-radius: var(--radius-sm);
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 15px;
+    transition: all var(--transition);
+  }
+
+  .icon-btn:hover {
+    background: var(--bg-hover);
+    color: var(--text-primary);
+  }
+
+  .sidebar-section {
+    padding: 12px 12px 4px;
+  }
+
+  .sidebar-label {
+    font-size: 10.5px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.8px;
+    color: var(--text-tertiary);
+    padding: 0 4px 8px;
+  }
+
+  .sidebar-list {
+    list-style: none;
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+  }
+
+  .sidebar-item {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 8px 10px;
+    border-radius: var(--radius-md);
+    cursor: pointer;
+    transition: all var(--transition);
+    font-size: 13px;
+    color: var(--text-secondary);
+  }
+
+  .sidebar-item:hover { background: var(--bg-hover); color: var(--text-primary); }
+  .sidebar-item.active { background: var(--accent-muted); color: var(--accent); font-weight: 500; }
+
+  .status-dot {
+    width: 7px; height: 7px;
+    border-radius: 50%;
+    flex-shrink: 0;
+  }
+  .status-dot.idle { background: var(--green); box-shadow: 0 0 6px rgba(34,197,94,0.4); }
+  .status-dot.running { background: var(--yellow); box-shadow: 0 0 6px rgba(234,179,8,0.4); animation: pulse 1.5s ease infinite; }
+  .status-dot.waiting { background: var(--red); box-shadow: 0 0 6px rgba(239,68,68,0.4); animation: pulse 1s ease infinite; }
+
+  @keyframes pulse {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.4; }
+  }
+
+  .item-meta {
+    font-size: 11px;
+    color: var(--text-tertiary);
+    margin-left: auto;
+    white-space: nowrap;
+  }
+
+  .sidebar-sessions {
+    flex: 1;
+    overflow-y: auto;
+    padding: 0 12px 12px;
+  }
+
+  .sidebar-footer {
+    padding: 12px;
+    border-top: 1px solid var(--border-light);
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+  }
+
+  .connection-badge {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 11px;
+    color: var(--text-tertiary);
+    padding: 4px 8px;
+    background: var(--green-muted);
+    border-radius: var(--radius-sm);
+  }
+
+  .connection-badge .status-dot { width: 5px; height: 5px; }
+
+  /* ─── Main Content ─── */
+  .main {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+    background: var(--bg-main);
+  }
+
+  .main-header {
+    height: 52px;
+    min-height: 52px;
+    padding: 0 20px;
+    border-bottom: 1px solid var(--border);
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    background: var(--bg-sidebar);
+  }
+
+  .header-left {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+  }
+
+  .header-title {
+    font-size: 14px;
+    font-weight: 600;
+  }
+
+  .header-agent-badge {
+    font-size: 11px;
+    padding: 2px 8px;
+    border-radius: var(--radius-sm);
+    background: var(--accent-muted);
+    color: var(--accent);
+    font-weight: 500;
+  }
+
+  .header-status {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 12px;
+    color: var(--text-secondary);
+  }
+
+  .header-right {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+  }
+
+  /* ─── Messages ─── */
+  .messages {
+    flex: 1;
+    overflow-y: auto;
+    padding: 20px 24px;
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+  }
+
+  .msg {
+    display: flex;
+    gap: 12px;
+    max-width: 820px;
+  }
+
+  .msg-avatar {
+    width: 28px; height: 28px;
+    border-radius: var(--radius-sm);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 13px;
+    flex-shrink: 0;
+    margin-top: 2px;
+  }
+
+  .msg-avatar.user {
+    background: var(--accent-muted);
+    color: var(--accent);
+    font-weight: 600;
+  }
+
+  .msg-avatar.agent {
+    background: var(--green-muted);
+    color: var(--green);
+    font-weight: 600;
+  }
+
+  .msg-body {
+    flex: 1;
+    min-width: 0;
+  }
+
+  .msg-header {
+    display: flex;
+    align-items: baseline;
+    gap: 8px;
+    margin-bottom: 4px;
+  }
+
+  .msg-name {
+    font-size: 13px;
+    font-weight: 600;
+  }
+
+  .msg-time {
+    font-size: 11px;
+    color: var(--text-tertiary);
+  }
+
+  .msg-content {
+    font-size: 13.5px;
+    line-height: 1.65;
+    color: var(--text-primary);
+  }
+
+  .msg-content p { margin-bottom: 8px; }
+  .msg-content p:last-child { margin-bottom: 0; }
+
+  /* Code block */
+  .code-block {
+    background: var(--bg-code);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-md);
+    margin: 8px 0;
+    overflow: hidden;
+  }
+
+  .code-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 6px 12px;
+    border-bottom: 1px solid var(--border-light);
+    font-size: 11px;
+    color: var(--text-tertiary);
+  }
+
+  .code-body {
+    padding: 12px 14px;
+    font-family: var(--font-mono);
+    font-size: 12.5px;
+    line-height: 1.6;
+    overflow-x: auto;
+    color: var(--text-secondary);
+  }
+
+  .code-body .kw { color: #c792ea; }
+  .code-body .fn { color: #82aaff; }
+  .code-body .str { color: #c3e88d; }
+  .code-body .cm { color: #546e7a; }
+  .code-body .tp { color: #ffcb6b; }
+
+  /* Permission card */
+  .perm-card {
+    background: var(--bg-card);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-lg);
+    padding: 16px;
+    margin: 8px 0;
+    box-shadow: var(--shadow);
+  }
+
+  .perm-header {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-bottom: 10px;
+  }
+
+  .perm-icon {
+    width: 24px; height: 24px;
+    border-radius: 6px;
+    background: var(--yellow-muted);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 12px;
+  }
+
+  .perm-title {
+    font-size: 13px;
+    font-weight: 600;
+  }
+
+  .perm-detail {
+    font-family: var(--font-mono);
+    font-size: 12px;
+    color: var(--text-secondary);
+    padding: 8px 10px;
+    background: var(--bg-code);
+    border-radius: var(--radius-sm);
+    margin-bottom: 12px;
+    word-break: break-all;
+  }
+
+  .perm-actions {
+    display: flex;
+    gap: 8px;
+  }
+
+  .btn {
+    padding: 6px 14px;
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    font-size: 12.5px;
+    font-weight: 500;
+    cursor: pointer;
+    transition: all var(--transition);
+    background: var(--bg-card);
+    color: var(--text-secondary);
+    font-family: var(--font-sans);
+  }
+
+  .btn:hover { background: var(--bg-hover); color: var(--text-primary); }
+
+  .btn-primary {
+    background: var(--accent);
+    color: white;
+    border-color: var(--accent);
+  }
+  .btn-primary:hover { background: var(--accent-hover); }
+
+  .btn-danger {
+    color: var(--red);
+    border-color: var(--red-muted);
+    background: var(--red-muted);
+  }
+  .btn-danger:hover { background: var(--red); color: white; }
+
+  /* Streaming indicator */
+  .streaming {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 12px;
+    color: var(--accent);
+    padding: 4px 0;
+  }
+
+  .streaming-dots span {
+    display: inline-block;
+    width: 4px; height: 4px;
+    border-radius: 50%;
+    background: var(--accent);
+    animation: bounce 1.2s infinite;
+  }
+  .streaming-dots span:nth-child(2) { animation-delay: 0.2s; }
+  .streaming-dots span:nth-child(3) { animation-delay: 0.4s; }
+
+  @keyframes bounce {
+    0%, 80%, 100% { opacity: 0.3; transform: scale(0.8); }
+    40% { opacity: 1; transform: scale(1); }
+  }
+
+  /* ─── Composer ─── */
+  .composer {
+    padding: 12px 24px 16px;
+    border-top: 1px solid var(--border);
+    background: var(--bg-sidebar);
+  }
+
+  .composer-inner {
+    display: flex;
+    align-items: flex-end;
+    gap: 8px;
+    background: var(--bg-input);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-lg);
+    padding: 8px 12px;
+    transition: border-color var(--transition);
+  }
+
+  .composer-inner:focus-within {
+    border-color: var(--accent);
+  }
+
+  .composer-input {
+    flex: 1;
+    border: none;
+    outline: none;
+    background: transparent;
+    color: var(--text-primary);
+    font-size: 13.5px;
+    font-family: var(--font-sans);
+    resize: none;
+    min-height: 20px;
+    max-height: 120px;
+    line-height: 1.5;
+  }
+
+  .composer-input::placeholder {
+    color: var(--text-tertiary);
+  }
+
+  .composer-actions {
+    display: flex;
+    gap: 2px;
+    align-items: center;
+  }
+
+  .composer-btn {
+    width: 30px; height: 30px;
+    border: none;
+    background: transparent;
+    color: var(--text-tertiary);
+    border-radius: var(--radius-sm);
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 16px;
+    transition: all var(--transition);
+  }
+
+  .composer-btn:hover { background: var(--bg-hover); color: var(--text-primary); }
+  .composer-btn.send { color: var(--accent); }
+  .composer-btn.send:hover { background: var(--accent-muted); }
+
+  .composer-hint {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding-top: 6px;
+    font-size: 11px;
+    color: var(--text-tertiary);
+  }
+
+  .kbd {
+    font-family: var(--font-mono);
+    font-size: 10px;
+    padding: 1px 5px;
+    background: var(--bg-hover);
+    border: 1px solid var(--border);
+    border-radius: 3px;
+  }
+
+  /* ─── Diff Panel ─── */
+  .diff-panel {
+    margin: 8px 0;
+    border: 1px solid var(--border);
+    border-radius: var(--radius-md);
+    overflow: hidden;
+  }
+
+  .diff-file-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 8px 12px;
+    background: var(--bg-card);
+    border-bottom: 1px solid var(--border-light);
+    font-size: 12px;
+  }
+
+  .diff-file-path {
+    font-family: var(--font-mono);
+    font-weight: 500;
+    color: var(--text-primary);
+  }
+
+  .diff-stat {
+    display: flex;
+    gap: 8px;
+    font-family: var(--font-mono);
+    font-size: 11px;
+  }
+
+  .diff-stat .add { color: var(--diff-add-text); }
+  .diff-stat .del { color: var(--diff-del-text); }
+
+  .diff-lines {
+    font-family: var(--font-mono);
+    font-size: 12px;
+    line-height: 1.65;
+  }
+
+  .diff-line {
+    display: flex;
+    padding: 0 12px;
+    white-space: pre;
+  }
+
+  .diff-line .ln {
+    width: 40px;
+    text-align: right;
+    padding-right: 12px;
+    color: var(--text-tertiary);
+    user-select: none;
+    flex-shrink: 0;
+    font-size: 11px;
+  }
+
+  .diff-line .code { flex: 1; }
+  .diff-line.add { background: var(--diff-add-bg); }
+  .diff-line.add .code { color: var(--diff-add-text); }
+  .diff-line.del { background: var(--diff-del-bg); }
+  .diff-line.del .code { color: var(--diff-del-text); }
+  .diff-line.ctx .code { color: var(--text-secondary); }
+  .diff-line.hunk { color: var(--text-tertiary); font-style: italic; padding: 4px 12px; background: var(--bg-hover); }
+
+  /* ─── Command Palette ─── */
+  .cmd-palette {
+    position: absolute;
+    bottom: 100%;
+    left: 0; right: 0;
+    margin-bottom: 4px;
+    background: var(--bg-card);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-lg);
+    box-shadow: 0 -4px 24px rgba(0,0,0,0.25);
+    padding: 6px;
+    max-height: 240px;
+    overflow-y: auto;
+  }
+
+  .cmd-item {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 8px 10px;
+    border-radius: var(--radius-sm);
+    cursor: pointer;
+    transition: background var(--transition);
+  }
+
+  .cmd-item:hover, .cmd-item.active { background: var(--bg-hover); }
+
+  .cmd-name {
+    font-family: var(--font-mono);
+    font-size: 12.5px;
+    font-weight: 500;
+    color: var(--accent);
+    min-width: 80px;
+  }
+
+  .cmd-desc {
+    font-size: 12px;
+    color: var(--text-secondary);
+  }
+
+  /* ─── Theme Toggle ─── */
+  .theme-toggle {
+    position: fixed;
+    top: 12px;
+    right: 12px;
+    z-index: 100;
+    display: flex;
+    background: var(--bg-card);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-md);
+    overflow: hidden;
+  }
+
+  .theme-toggle button {
+    padding: 6px 12px;
+    border: none;
+    background: transparent;
+    color: var(--text-tertiary);
+    font-size: 13px;
+    cursor: pointer;
+    transition: all var(--transition);
+  }
+
+  .theme-toggle button.active {
+    background: var(--accent-muted);
+    color: var(--accent);
+  }
+
+  /* ─── Scrollbar ─── */
+  ::-webkit-scrollbar { width: 6px; }
+  ::-webkit-scrollbar-track { background: transparent; }
+  ::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
+  ::-webkit-scrollbar-thumb:hover { background: var(--text-tertiary); }
+</style>
+</head>
+<body>
+
+<div class="theme-toggle">
+  <button class="active" onclick="setTheme('dark')">Dark</button>
+  <button onclick="setTheme('light')">Light</button>
+</div>
+
+<div class="app-shell">
+  <!-- ─── Sidebar ─── -->
+  <aside class="sidebar">
+    <div class="sidebar-header">
+      <div class="sidebar-brand">
+        <div class="brand-dot"></div>
+        <span class="brand-name">CC-Connect</span>
+      </div>
+      <div class="sidebar-actions">
+        <button class="icon-btn" title="New Session">＋</button>
+        <button class="icon-btn" title="Settings">⚙</button>
+      </div>
+    </div>
+
+    <div class="sidebar-section">
+      <div class="sidebar-label">Projects</div>
+      <ul class="sidebar-list">
+        <li class="sidebar-item active">
+          <span class="status-dot running"></span>
+          <span>my-project</span>
+          <span class="item-meta">Claude Code</span>
+        </li>
+        <li class="sidebar-item">
+          <span class="status-dot idle"></span>
+          <span>data-pipeline</span>
+          <span class="item-meta">Codex</span>
+        </li>
+        <li class="sidebar-item">
+          <span class="status-dot waiting"></span>
+          <span>web-app</span>
+          <span class="item-meta">Gemini</span>
+        </li>
+      </ul>
+    </div>
+
+    <div class="sidebar-section">
+      <div class="sidebar-label">Sessions</div>
+    </div>
+    <div class="sidebar-sessions">
+      <ul class="sidebar-list">
+        <li class="sidebar-item active">
+          <span style="font-size:14px;opacity:0.5">💬</span>
+          <span>重构 UserService</span>
+        </li>
+        <li class="sidebar-item">
+          <span style="font-size:14px;opacity:0.5">💬</span>
+          <span>修复登录 Bug</span>
+        </li>
+        <li class="sidebar-item">
+          <span style="font-size:14px;opacity:0.5">💬</span>
+          <span>添加单元测试</span>
+        </li>
+        <li class="sidebar-item">
+          <span style="font-size:14px;opacity:0.5">💬</span>
+          <span>API 文档生成</span>
+        </li>
+      </ul>
+    </div>
+
+    <div class="sidebar-footer">
+      <div class="connection-badge">
+        <span class="status-dot idle"></span>
+        <span>Mac-Studio · 局域网</span>
+      </div>
+      <button class="icon-btn" title="QR Pair">⊞</button>
+    </div>
+  </aside>
+
+  <!-- ─── Main ─── -->
+  <main class="main">
+    <div class="main-header">
+      <div class="header-left">
+        <span class="header-title">重构 UserService</span>
+        <span class="header-agent-badge">Claude Code</span>
+        <div class="header-status">
+          <span class="status-dot running"></span>
+          <span>运行中</span>
+        </div>
+      </div>
+      <div class="header-right">
+        <button class="icon-btn" title="Diff">⇅</button>
+        <button class="icon-btn" title="Files">📁</button>
+        <button class="icon-btn" title="More">⋯</button>
+      </div>
+    </div>
+
+    <div class="messages">
+      <!-- User message -->
+      <div class="msg">
+        <div class="msg-avatar user">Y</div>
+        <div class="msg-body">
+          <div class="msg-header">
+            <span class="msg-name">You</span>
+            <span class="msg-time">14:32</span>
+          </div>
+          <div class="msg-content">
+            <p>帮我重构 UserService，把数据库查询抽到 Repository 层，Service 只处理业务逻辑。</p>
+          </div>
+        </div>
+      </div>
+
+      <!-- Agent reply with code -->
+      <div class="msg">
+        <div class="msg-avatar agent">C</div>
+        <div class="msg-body">
+          <div class="msg-header">
+            <span class="msg-name">Claude Code</span>
+            <span class="msg-time">14:32</span>
+          </div>
+          <div class="msg-content">
+            <p>好的，我来帮你重构。先创建 Repository 接口和实现：</p>
+
+            <div class="code-block">
+              <div class="code-header">
+                <span>internal/repo/user_repo.go</span>
+                <span>Go</span>
+              </div>
+              <div class="code-body"><span class="kw">type</span> <span class="tp">UserRepo</span> <span class="kw">interface</span> {
+    <span class="fn">FindByID</span>(ctx context.Context, id <span class="tp">string</span>) (*User, error)
+    <span class="fn">FindByEmail</span>(ctx context.Context, email <span class="tp">string</span>) (*User, error)
+    <span class="fn">Save</span>(ctx context.Context, user *User) error
+    <span class="fn">Delete</span>(ctx context.Context, id <span class="tp">string</span>) error
+}
+
+<span class="kw">type</span> <span class="tp">pgUserRepo</span> <span class="kw">struct</span> {
+    db *sql.DB
+}
+
+<span class="kw">func</span> <span class="fn">NewUserRepo</span>(db *sql.DB) UserRepo {
+    <span class="kw">return</span> &pgUserRepo{db: db}
+}</div>
+            </div>
+
+            <p>现在重构 Service 层，移除直接的数据库依赖：</p>
+
+            <!-- Diff inline -->
+            <div class="diff-panel">
+              <div class="diff-file-header">
+                <span class="diff-file-path">internal/service/user_service.go</span>
+                <div class="diff-stat">
+                  <span class="add">+12</span>
+                  <span class="del">-8</span>
+                </div>
+              </div>
+              <div class="diff-lines">
+                <div class="diff-line hunk">@@ -15,12 +15,16 @@ type UserService struct {</div>
+                <div class="diff-line del"><span class="ln">15</span><span class="code">-    db     *sql.DB</span></div>
+                <div class="diff-line del"><span class="ln">16</span><span class="code">-    cache  *redis.Client</span></div>
+                <div class="diff-line add"><span class="ln">15</span><span class="code">+    repo   UserRepo</span></div>
+                <div class="diff-line add"><span class="ln">16</span><span class="code">+    cache  Cache</span></div>
+                <div class="diff-line ctx"><span class="ln">17</span><span class="code"> }</span></div>
+                <div class="diff-line ctx"><span class="ln">18</span><span class="code"> </span></div>
+                <div class="diff-line del"><span class="ln">19</span><span class="code">-func NewUserService(db *sql.DB, cache *redis.Client) *UserService {</span></div>
+                <div class="diff-line del"><span class="ln">20</span><span class="code">-    return &UserService{db: db, cache: cache}</span></div>
+                <div class="diff-line add"><span class="ln">19</span><span class="code">+func NewUserService(repo UserRepo, cache Cache) *UserService {</span></div>
+                <div class="diff-line add"><span class="ln">20</span><span class="code">+    return &UserService{repo: repo, cache: cache}</span></div>
+                <div class="diff-line ctx"><span class="ln">21</span><span class="code"> }</span></div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Permission card -->
+      <div class="msg">
+        <div class="msg-avatar agent">C</div>
+        <div class="msg-body">
+          <div class="msg-header">
+            <span class="msg-name">Claude Code</span>
+            <span class="msg-time">14:33</span>
+          </div>
+          <div class="perm-card">
+            <div class="perm-header">
+              <div class="perm-icon">🔐</div>
+              <span class="perm-title">权限请求 — Write File</span>
+            </div>
+            <div class="perm-detail">internal/repo/user_repo.go</div>
+            <div class="perm-actions">
+              <button class="btn btn-primary">✓ Allow</button>
+              <button class="btn btn-danger">✕ Deny</button>
+              <button class="btn">Allow All</button>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Streaming message -->
+      <div class="msg">
+        <div class="msg-avatar agent">C</div>
+        <div class="msg-body">
+          <div class="msg-header">
+            <span class="msg-name">Claude Code</span>
+            <span class="msg-time">14:33</span>
+          </div>
+          <div class="msg-content">
+            <p>文件已创建。接下来修改 <code style="font-family:var(--font-mono);font-size:12px;padding:2px 5px;background:var(--bg-code);border-radius:3px;">main.go</code> 里的依赖注入，把新的 Repo 接入到 Service...</p>
+            <div class="streaming">
+              <div class="streaming-dots"><span></span><span></span><span></span></div>
+              <span>正在输出</span>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Composer -->
+    <div class="composer" style="position:relative;">
+      <div class="composer-inner">
+        <textarea class="composer-input" rows="1" placeholder="输入消息，/ 触发命令..."></textarea>
+        <div class="composer-actions">
+          <button class="composer-btn" title="Attach">📎</button>
+          <button class="composer-btn" title="Voice">🎤</button>
+          <button class="composer-btn send" title="Send">▶</button>
+        </div>
+      </div>
+      <div class="composer-hint">
+        <span><kbd class="kbd">/</kbd> 命令</span>
+        <span><kbd class="kbd">Enter</kbd> 发送</span>
+        <span><kbd class="kbd">Shift+Enter</kbd> 换行</span>
+      </div>
+    </div>
+  </main>
+</div>
+
+<script>
+function setTheme(theme) {
+  document.documentElement.setAttribute('data-theme', theme);
+  document.querySelectorAll('.theme-toggle button').forEach(btn => {
+    btn.classList.toggle('active', btn.textContent.toLowerCase() === theme);
+  });
+}
+</script>
+</body>
+</html>
