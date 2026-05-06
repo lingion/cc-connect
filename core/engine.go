@@ -1067,6 +1067,8 @@ func (e *Engine) ExecuteCronJob(job *CronJob) error {
 	}
 
 	// Notify user that a cron job is executing (unless silent/muted)
+	// Note: this notification uses targetPlatform directly, not the tracking wrapper,
+	// so it won't count as a "meaningful delivery" for empty response detection.
 	if !job.Mute {
 		silent := false
 		if e.cronScheduler != nil {
@@ -1083,6 +1085,15 @@ func (e *Engine) ExecuteCronJob(job *CronJob) error {
 			}
 			e.send(targetPlatform, replyCtx, fmt.Sprintf("⏰ %s", desc))
 		}
+	}
+
+	// For non-muted cron jobs, wrap with delivery tracking to detect empty responses.
+	// This wrapper is created after the "⏰" notification so only actual agent responses
+	// are tracked.
+	var deliveryTracker *deliveryTrackingPlatform
+	if !job.Mute {
+		deliveryTracker = &deliveryTrackingPlatform{Platform: effectivePlatform}
+		effectivePlatform = deliveryTracker
 	}
 
 	if job.IsShellJob() {
@@ -1151,6 +1162,10 @@ func (e *Engine) ExecuteCronJob(job *CronJob) error {
 		}
 		e.processInteractiveMessageWith(effectivePlatform, msg, session, agent, sessions, iKey, workspaceDir, runSessionKey)
 		e.cleanupInteractiveState(iKey)
+		// Check if any response was delivered for non-muted cron jobs
+		if deliveryTracker != nil && !deliveryTracker.wasDelivered() {
+			return fmt.Errorf("cron job %q produced an empty response", job.ID)
+		}
 		return nil
 	}
 
@@ -1164,6 +1179,10 @@ func (e *Engine) ExecuteCronJob(job *CronJob) error {
 		iKey = workspaceDir + ":" + sessionKey
 	}
 	e.processInteractiveMessageWith(effectivePlatform, msg, session, agent, sessions, iKey, workspaceDir, sessionKey)
+	// Check if any response was delivered for non-muted cron jobs
+	if deliveryTracker != nil && !deliveryTracker.wasDelivered() {
+		return fmt.Errorf("cron job %q produced an empty response", job.ID)
+	}
 	return nil
 }
 
