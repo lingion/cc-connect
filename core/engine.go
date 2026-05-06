@@ -1089,12 +1089,31 @@ func (e *Engine) ExecuteCronJob(job *CronJob) error {
 		return e.executeCronShell(effectivePlatform, replyCtx, job)
 	}
 
+	// Resolve prompt: expand skill if prompt starts with "/"
+	prompt := job.Prompt
+	if strings.HasPrefix(prompt, "/") {
+		// Parse command and args similar to handleCommand
+		parts := strings.Fields(prompt)
+		cmd := strings.ToLower(strings.TrimPrefix(parts[0], "/"))
+		args := parts[1:]
+
+		// Try to resolve as a skill
+		if skill := e.skills.Resolve(cmd); skill != nil {
+			prompt = BuildSkillInvocationPrompt(skill, args)
+			slog.Info("cron: expanded skill command",
+				"job_id", job.ID,
+				"skill", skill.Name,
+				"args", args)
+		}
+		// If not a known skill, keep the original prompt (fall through to agent)
+	}
+
 	msg := &Message{
 		SessionKey:   sessionKey,
 		Platform:     platformName,
 		UserID:       "cron",
 		UserName:     "cron",
-		Content:      job.Prompt,
+		Content:      prompt,
 		ReplyCtx:     replyCtx,
 		ModeOverride: job.Mode,
 	}

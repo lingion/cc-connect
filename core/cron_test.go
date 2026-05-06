@@ -3,6 +3,7 @@ package core
 import (
 	"context"
 	"encoding/json"
+	"os"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -110,6 +111,124 @@ func TestMutePlatform_DiscardMessages(t *testing.T) {
 
 	if mp.Name() != "test" {
 		t.Errorf("mutePlatform should delegate Name(), got %q", mp.Name())
+	}
+}
+
+func TestExecuteCronJob_ExpandsSkillCommand(t *testing.T) {
+	// Create a temp skill directory with a test skill
+	skillDir := t.TempDir()
+	skillSubdir := filepath.Join(skillDir, "daily-brief")
+	if err := os.Mkdir(skillSubdir, 0755); err != nil {
+		t.Fatal(err)
+	}
+	skillContent := `---
+name: daily-brief
+description: Generate daily briefing
+---
+Summarize today's activity and pending tasks.
+`
+	if err := os.WriteFile(filepath.Join(skillSubdir, "SKILL.md"), []byte(skillContent), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	dir := t.TempDir()
+	store, err := NewCronStore(dir)
+	if err != nil {
+		t.Fatalf("NewCronStore() error = %v", err)
+	}
+	scheduler := NewCronScheduler(store)
+
+	platform := &stubCronReplyTargetPlatform{
+		stubPlatformEngine: stubPlatformEngine{n: "slack"},
+	}
+	agentSession := newResultAgentSession("briefing done")
+	agent := &resultAgent{session: agentSession}
+
+	e := NewEngine("test", agent, []Platform{platform}, "", LangEnglish)
+	defer e.cancel()
+	e.cronScheduler = scheduler
+	e.skills.SetDirs([]string{skillDir})
+
+	// Cron job with skill command
+	job := &CronJob{
+		ID:          "job-skill",
+		SessionKey:  "slack:C123:U456",
+		Prompt:      "/daily-brief for today",
+		Description: "Daily briefing",
+	}
+	if err := store.Add(job); err != nil {
+		t.Fatalf("store.Add() error = %v", err)
+	}
+
+	if err := e.ExecuteCronJob(job); err != nil {
+		t.Fatalf("ExecuteCronJob() error = %v", err)
+	}
+
+	// Verify the skill was expanded by checking the prompts sent to the agent
+	// (not the platform messages, which are just notifications + agent responses)
+	prompts := agentSession.sentPrompts
+	if len(prompts) == 0 {
+		t.Fatal("expected prompts to be sent to agent")
+	}
+
+	// The expanded prompt should contain skill instructions
+	found := false
+	for _, prompt := range prompts {
+		if strings.Contains(prompt, "Skill: daily-brief") || strings.Contains(prompt, "Skill Instructions") {
+			found = true
+			break
+		}
+	}
+	if !found {
+		t.Errorf("expected skill expansion in agent prompts, got: %v", prompts)
+	}
+}
+
+func TestExecuteCronJob_UnknownSlashCommandPassthrough(t *testing.T) {
+	dir := t.TempDir()
+	store, err := NewCronStore(dir)
+	if err != nil {
+		t.Fatalf("NewCronStore() error = %v", err)
+	}
+	scheduler := NewCronScheduler(store)
+
+	platform := &stubCronReplyTargetPlatform{
+		stubPlatformEngine: stubPlatformEngine{n: "telegram"},
+	}
+	agentSession := newResultAgentSession("ok")
+	agent := &resultAgent{session: agentSession}
+
+	e := NewEngine("test", agent, []Platform{platform}, "", LangEnglish)
+	defer e.cancel()
+	e.cronScheduler = scheduler
+	// No skill dirs - so /unknown-command won't be resolved
+
+	// Cron job with unknown slash command
+	job := &CronJob{
+		ID:          "job-unknown",
+		SessionKey:  "telegram:C123:U456",
+		Prompt:      "/unknown-command arg1 arg2",
+		Description: "Unknown cmd",
+	}
+	if err := store.Add(job); err != nil {
+		t.Fatalf("store.Add() error = %v", err)
+	}
+
+	if err := e.ExecuteCronJob(job); err != nil {
+		t.Fatalf("ExecuteCronJob() error = %v", err)
+	}
+
+	// The raw command should be passed through to the agent
+	sent := platform.getSent()
+	if len(sent) == 0 {
+		t.Fatal("expected messages to be sent")
+	}
+
+	// Should NOT contain skill expansion markers
+	for _, msg := range sent {
+		if strings.Contains(msg, "Skill Instructions") {
+			t.Errorf("unknown slash command should not be expanded as skill, got: %s", msg)
+		}
 	}
 }
 
