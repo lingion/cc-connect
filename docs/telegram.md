@@ -260,6 +260,38 @@ Check the following:
 
 Make sure Group Privacy mode is disabled. In BotFather: `/mybots` → select bot → `Bot Settings` → `Group Privacy` → `Turn off`.
 
+### Q: How to suppress "thinking" messages?
+
+By default, cc-connect sends agent "thinking" content as separate Telegram messages. These messages show the agent's reasoning process (truncated to 300 characters) and can be noisy, especially with models that generate long reasoning content (e.g., DeepSeek).
+
+To suppress these intermediate messages, add the following to your `config.toml`:
+
+```toml
+[display]
+thinking_messages = false  # Hide thinking messages (default: true)
+# thinking_max_len = 300   # Max chars for thinking when enabled (default: 300)
+# tool_messages = true     # Show/hide tool progress messages (default: true)
+```
+
+Alternatively, use display modes that automatically suppress thinking/tool messages:
+
+```toml
+[display]
+mode = "quiet"   # Hide thinking/tool, all text in one message
+# mode = "compact"  # Hide thinking/tool, each text segment separately
+# mode = "full"     # Show everything (default)
+```
+
+For per-project override:
+
+```toml
+[[projects]]
+name = "my-project"
+
+[projects.display]
+thinking_messages = false  # Only affect this project
+```
+
 ---
 
 ## References
