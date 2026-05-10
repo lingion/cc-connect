@@ -59,6 +59,7 @@ func (c *apiClient) longPollClient(timeout time.Duration) *http.Client {
 	tr := http.DefaultTransport
 	if t, ok := http.DefaultTransport.(*http.Transport); ok {
 		cloned := t.Clone()
+		cloned.Proxy = nil // Bypass proxy for ilink API (same as CDN client)
 		tr = cloned
 	}
 	return &http.Client{
