@@ -3503,7 +3503,9 @@ func (e *Engine) processInteractiveEvents(state *interactiveState, session *Sess
 						Done:    true,
 					})
 				}
-				if cardMessageID == nil {
+				// Delay card creation until we have visible toolSteps and !silentHold.
+				// This prevents "Bot recalled a message" on NO_REPLY when there's no visible content.
+				if cardMessageID == nil && len(toolSteps) > 0 && !silentHold {
 					card := richCardSupporter.BuildRichCard(CardStatusThinking, "", toolSteps, partialText, true, time.Since(turnStart))
 					if starter, ok := p.(PreviewStarter); ok {
 						handle, err := starter.SendPreviewStart(e.ctx, replyCtx, card)
@@ -3513,10 +3515,12 @@ func (e *Engine) processInteractiveEvents(state *interactiveState, session *Sess
 							cardMessageID = handle
 						}
 					}
-				} else if updater, ok := p.(MessageUpdater); ok {
+				} else if cardMessageID != nil {
 					card := richCardSupporter.BuildRichCard(CardStatusThinking, "", toolSteps, partialText, true, time.Since(turnStart))
-					if err := updater.UpdateMessage(e.ctx, cardMessageID, card); err != nil {
-						slog.Debug("rich card: failed to update thinking card", "platform", p.Name(), "error", err)
+					if updater, ok := p.(MessageUpdater); ok {
+						if err := updater.UpdateMessage(e.ctx, cardMessageID, card); err != nil {
+							slog.Debug("rich card: failed to update thinking card", "platform", p.Name(), "error", err)
+						}
 					}
 				}
 				break
@@ -3583,7 +3587,10 @@ func (e *Engine) processInteractiveEvents(state *interactiveState, session *Sess
 					Name:    event.ToolName,
 					Summary: truncateIf(event.ToolInput, e.display.ToolMaxLen),
 				})
-				if cardMessageID == nil {
+				// Tool steps are visible content that should be preserved even on NO_REPLY.
+				// If silentHold is active but we have tool steps, create the card now
+				// so the tool progress is visible. At end-of-stream we'll finalize as Done.
+				if cardMessageID == nil && (!silentHold || len(toolSteps) > 0) {
 					card := richCardSupporter.BuildRichCard(CardStatusWorking, "", toolSteps, partialText, true, time.Since(turnStart))
 					if starter, ok := p.(PreviewStarter); ok {
 						handle, err := starter.SendPreviewStart(e.ctx, replyCtx, card)
@@ -3593,10 +3600,12 @@ func (e *Engine) processInteractiveEvents(state *interactiveState, session *Sess
 							cardMessageID = handle
 						}
 					}
-				} else if updater, ok := p.(MessageUpdater); ok {
+				} else if cardMessageID != nil {
 					card := richCardSupporter.BuildRichCard(CardStatusWorking, "", toolSteps, partialText, true, time.Since(turnStart))
-					if err := updater.UpdateMessage(e.ctx, cardMessageID, card); err != nil {
-						slog.Debug("rich card: failed to update tool card", "platform", p.Name(), "error", err)
+					if updater, ok := p.(MessageUpdater); ok {
+						if err := updater.UpdateMessage(e.ctx, cardMessageID, card); err != nil {
+							slog.Debug("rich card: failed to update tool card", "platform", p.Name(), "error", err)
+						}
 					}
 				}
 				break
@@ -3718,9 +3727,22 @@ func (e *Engine) processInteractiveEvents(state *interactiveState, session *Sess
 
 		case EventText:
 			if event.Content != "" && !isEllipsisOnly(event.Content) {
+				// Apply silentHold logic before creating the card.
+				// This prevents "Bot recalled a message" on NO_REPLY.
+				segmentText := strings.Join(textParts[segmentStart:], "") + event.Content
+				if silentHold {
+					if !couldBeSilentPrefix(segmentText) {
+						silentHold = false
+					}
+				} else if couldBeSilentPrefix(segmentText) {
+					// Hold streaming until we know whether this segment is NO_REPLY.
+					silentHold = true
+				}
 				if len(textParts) == 0 {
 					if hasRichCard {
-						if cardMessageID == nil {
+						// Delay card creation until !silentHold or we have visible toolSteps.
+						// Tool steps should be preserved even on NO_REPLY.
+						if cardMessageID == nil && (!silentHold || len(toolSteps) > 0) {
 							card := richCardSupporter.BuildRichCard(CardStatusWorking, "", toolSteps, partialText, true, time.Since(turnStart))
 							if starter, ok := p.(PreviewStarter); ok {
 								handle, err := starter.SendPreviewStart(e.ctx, replyCtx, card)
@@ -3758,11 +3780,6 @@ func (e *Engine) processInteractiveEvents(state *interactiveState, session *Sess
 								sp.appendText(segmentText) // flush all held chunks at once
 							}
 						}
-					} else if couldBeSilentPrefix(segmentText) {
-						// Hold streaming until we know whether this segment is NO_REPLY.
-						// Safe because once segmentText is no longer a prefix of "NO_REPLY",
-						// it can never become one again — we only ever transition held→released once.
-						silentHold = true
 					} else if sp.canPreview() {
 						sp.appendText(event.Content)
 					}
@@ -3995,14 +4012,24 @@ func (e *Engine) processInteractiveEvents(state *interactiveState, session *Sess
 			if isSilent {
 				sp.discard()
 				// Rich mode: cardMessageID is tracked independently of sp.previewMsgID,
-				// so sp.discard() doesn't reach it. Without this cleanup the rich card
-				// would stay frozen in "Working" / "Thinking" header state forever
-				// (no Done flip, no Patch). Delete the message so NO_REPLY truly leaves
-				// no trace.
+				// so sp.discard() doesn't reach it.
 				if hasRichCard && cardMessageID != nil {
-					if cleaner, ok := p.(PreviewCleaner); ok {
-						if err := cleaner.DeletePreviewMessage(e.ctx, cardMessageID); err != nil {
-							slog.Debug("rich card: failed to delete card on silent reply", "platform", p.Name(), "error", err)
+					// If we have visible tool steps, finalize as Done instead of deleting.
+					// This preserves tool progress that occurred before NO_REPLY was detected,
+					// avoiding the "Bot recalled a message" gray bar.
+					if len(toolSteps) > 0 {
+						finalCard := richCardSupporter.BuildRichCard(CardStatusDone, "", toolSteps, "", false, time.Since(turnStart))
+						if updater, ok := p.(MessageUpdater); ok {
+							if err := updater.UpdateMessage(e.ctx, cardMessageID, finalCard); err != nil {
+								slog.Debug("rich card: failed to finalize card on silent reply with tool steps", "platform", p.Name(), "error", err)
+							}
+						}
+					} else {
+						// No visible content; delete the card so NO_REPLY truly leaves no trace.
+						if cleaner, ok := p.(PreviewCleaner); ok {
+							if err := cleaner.DeletePreviewMessage(e.ctx, cardMessageID); err != nil {
+								slog.Debug("rich card: failed to delete card on silent reply", "platform", p.Name(), "error", err)
+							}
 						}
 					}
 					cardMessageID = nil
