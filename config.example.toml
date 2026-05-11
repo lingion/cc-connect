@@ -829,11 +829,16 @@ mode = "default" # "default" | "acceptEdits" (edit) | "plan" | "auto" | "bypassP
 # model = "MiniMax-M2.5-highspeed"
 # alias = "m25fast"
 #
-# # For special setups (Bedrock, Vertex, etc.), use the env map:
-# # 特殊环境（Bedrock、Vertex 等）使用 env 字段：
+# # For special setups (Bedrock, Vertex, Foundry), use the env map:
+# # 特殊环境（Bedrock、Vertex、Foundry）使用 env 字段：
 # [[projects.agent.providers]]
 # name = "bedrock"
 # env = { CLAUDE_CODE_USE_BEDROCK = "1", AWS_PROFILE = "bedrock" }
+# # For Bedrock/Vertex/Foundry that don't support adaptive thinking,
+# # add thinking = "disabled" to enable automatic request rewriting.
+# # 对于不支持 adaptive thinking 的 Bedrock/Vertex/Foundry，
+# # 设置 thinking = "disabled" 启用自动请求重写。
+# thinking = "disabled"
 
 # Reference normalization and rendering / 本地引用标准化与展示优化
 # Disabled by default. When enabled, cc-connect can normalize Codex / Claude Code
