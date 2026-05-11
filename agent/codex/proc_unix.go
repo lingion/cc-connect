@@ -7,6 +7,8 @@ import (
 	"os"
 	"os/exec"
 	"syscall"
+
+	"github.com/chenhg5/cc-connect/core"
 )
 
 func prepareCmdForKill(cmd *exec.Cmd) {
@@ -17,6 +19,12 @@ func prepareCmdForKill(cmd *exec.Cmd) {
 		cmd.SysProcAttr = &syscall.SysProcAttr{}
 	}
 	cmd.SysProcAttr.Setpgid = true
+
+	// Set parent death signal so subprocess receives SIGTERM when cc-connect dies.
+	// This prevents zombie CPU spin-loops on unexpected parent termination.
+	// Note: core.SetParentDeathSignal may set Pdeathsig, but Setpgid is kept
+	// for proper process group killing via forceKillCmd.
+	_ = core.SetParentDeathSignal(cmd)
 }
 
 func forceKillCmd(cmd *exec.Cmd) error {

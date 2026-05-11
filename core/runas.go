@@ -132,19 +132,28 @@ func (o SpawnOptions) mergedAllowlist() []string {
 // Does NOT run the per-spawn re-check — callers should invoke
 // VerifyRunAsUserCheap immediately before Start() so a sudoers edit
 // between startup preflight and spawn is caught.
+//
+// The returned cmd has SetParentDeathSignal applied to ensure the subprocess
+// receives SIGTERM when cc-connect exits unexpectedly (Linux only).
 func BuildSpawnCommand(ctx context.Context, opts SpawnOptions, name string, args ...string) *exec.Cmd {
+	var cmd *exec.Cmd
 	if !opts.IsolationMode() {
-		return exec.CommandContext(ctx, name, args...)
+		cmd = exec.CommandContext(ctx, name, args...)
+	} else {
+		sudoArgs := []string{
+			"-n",
+			"-iu", opts.RunAsUser,
+			"--preserve-env=" + strings.Join(opts.mergedAllowlist(), ","),
+			"--",
+			name,
+		}
+		sudoArgs = append(sudoArgs, args...)
+		cmd = exec.CommandContext(ctx, "sudo", sudoArgs...)
 	}
-	sudoArgs := []string{
-		"-n",
-		"-iu", opts.RunAsUser,
-		"--preserve-env=" + strings.Join(opts.mergedAllowlist(), ","),
-		"--",
-		name,
-	}
-	sudoArgs = append(sudoArgs, args...)
-	return exec.CommandContext(ctx, "sudo", sudoArgs...)
+	// Set parent death signal so subprocess exits when cc-connect dies.
+	// This prevents zombie CPU spin-loops on unexpected parent termination.
+	_ = SetParentDeathSignal(cmd)
+	return cmd
 }
 
 // FilterEnvForSpawn strips env down to the merged allowlist when
