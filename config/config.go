@@ -2788,6 +2788,12 @@ type ProjectSettingsUpdate struct {
 	ReplyFooter          *bool
 	InjectSender         *bool
 	PlatformAllowFrom    map[string]string
+	// Session Reset on Idle
+	ResetOnIdleMins *int
+	// Auto Compress
+	AutoCompressEnabled    *bool
+	AutoCompressMaxTokens  *int
+	AutoCompressMinGapMins *int
 }
 
 // SaveProjectSettings persists project-level settings and the global language to config.toml.
@@ -2916,6 +2922,18 @@ func SaveProjectSettings(projectName string, update ProjectSettingsUpdate) error
 				proj.Platforms[j].Options["allow_from"] = strings.TrimSpace(af)
 			}
 		}
+		if update.ResetOnIdleMins != nil {
+			proj.ResetOnIdleMins = update.ResetOnIdleMins
+		}
+		if update.AutoCompressEnabled != nil {
+			proj.AutoCompress.Enabled = update.AutoCompressEnabled
+		}
+		if update.AutoCompressMaxTokens != nil {
+			proj.AutoCompress.MaxTokens = update.AutoCompressMaxTokens
+		}
+		if update.AutoCompressMinGapMins != nil {
+			proj.AutoCompress.MinGapMins = update.AutoCompressMinGapMins
+		}
 		return saveConfig(cfg)
 	}
 	return fmt.Errorf("project %q not found", projectName)
@@ -2969,6 +2987,18 @@ func GetProjectConfigDetails(projectName string) map[string]any {
 		result["platform_configs"] = platConfigs
 		if len(p.Agent.ProviderRefs) > 0 {
 			result["provider_refs"] = p.Agent.ProviderRefs
+		}
+		if p.ResetOnIdleMins != nil {
+			result["reset_on_idle_mins"] = *p.ResetOnIdleMins
+		}
+		if p.AutoCompress.Enabled != nil {
+			result["auto_compress_enabled"] = *p.AutoCompress.Enabled
+		}
+		if p.AutoCompress.MaxTokens != nil {
+			result["auto_compress_max_tokens"] = *p.AutoCompress.MaxTokens
+		}
+		if p.AutoCompress.MinGapMins != nil {
+			result["auto_compress_min_gap_mins"] = *p.AutoCompress.MinGapMins
 		}
 		return result
 	}

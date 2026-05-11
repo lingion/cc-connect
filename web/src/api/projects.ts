@@ -37,6 +37,12 @@ export interface ProjectDetail {
     language: string;
     disabled_commands: string[];
   };
+  // Session Reset on Idle
+  reset_on_idle_mins?: number;
+  // Auto Compress
+  auto_compress_enabled?: boolean;
+  auto_compress_max_tokens?: number;
+  auto_compress_min_gap_mins?: number;
 }
 
 export interface ProjectSettingsUpdate {
@@ -50,6 +56,12 @@ export interface ProjectSettingsUpdate {
   reply_footer?: boolean;
   inject_sender?: boolean;
   platform_allow_from?: Record<string, string>;
+  // Session Reset on Idle
+  reset_on_idle_mins?: number;
+  // Auto Compress
+  auto_compress_enabled?: boolean;
+  auto_compress_max_tokens?: number;
+  auto_compress_min_gap_mins?: number;
 }
 
 export const listAgentTypes = () => api.get<{ agents: string[]; platforms: string[] }>('/agents');

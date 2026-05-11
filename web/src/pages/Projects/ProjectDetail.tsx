@@ -55,6 +55,12 @@ export default function ProjectDetail() {
   const [platformAllowFrom, setPlatformAllowFrom] = useState<Record<string, string>>({});
   const [saving, setSaving] = useState(false);
 
+  // Session Reset and Auto Compress
+  const [resetOnIdleMins, setResetOnIdleMins] = useState(0);
+  const [autoCompressEnabled, setAutoCompressEnabled] = useState(false);
+  const [autoCompressMaxTokens, setAutoCompressMaxTokens] = useState(0);
+  const [autoCompressMinGapMins, setAutoCompressMinGapMins] = useState(30);
+
   // Agent type
   const [agentTypes, setAgentTypes] = useState<string[]>([]);
   const [selectedAgentType, setSelectedAgentType] = useState('');
@@ -144,6 +150,10 @@ export default function ProjectDetail() {
           if (pc.allow_from !== undefined) afMap[pc.type] = pc.allow_from;
         });
         setPlatformAllowFrom(afMap);
+        setResetOnIdleMins(proj.value.reset_on_idle_mins || 0);
+        setAutoCompressEnabled(proj.value.auto_compress_enabled || false);
+        setAutoCompressMaxTokens(proj.value.auto_compress_max_tokens || 0);
+        setAutoCompressMinGapMins(proj.value.auto_compress_min_gap_mins || 30);
       }
       if (provs.status === 'fulfilled') {
         setProviders(provs.value.providers || []);
@@ -187,6 +197,10 @@ export default function ProjectDetail() {
         reply_footer: replyFooter,
         inject_sender: injectSender,
         platform_allow_from: platformAllowFrom,
+        reset_on_idle_mins: resetOnIdleMins,
+        auto_compress_enabled: autoCompressEnabled,
+        auto_compress_max_tokens: autoCompressMaxTokens,
+        auto_compress_min_gap_mins: autoCompressMinGapMins,
       });
       if (res && (res as any).restart_required) {
         setShowRestartModal(true);
@@ -569,6 +583,58 @@ export default function ProjectDetail() {
             <Input label={t('projects.language')} value={language} onChange={(e) => setLanguage(e.target.value)} placeholder="en, zh, ja..." />
             <Input label={t('projects.adminFrom')} value={adminFrom} onChange={(e) => setAdminFrom(e.target.value)} placeholder="user1,user2 or *" />
             <Input label={t('projects.disabledCommands')} value={disabledCmds} onChange={(e) => setDisabledCmds(e.target.value)} placeholder="restart, upgrade, cron" />
+          </div>
+        </Card>
+
+        {/* Session Reset on Idle */}
+        <Card>
+          <h3 className="text-sm font-semibold text-gray-900 dark:text-white mb-4">{t('projects.sessionReset', 'Session Reset')}</h3>
+          <div className="space-y-4 max-w-lg">
+            <Input
+              label={t('projects.resetOnIdleMins', 'Reset after idle (minutes)')}
+              type="number"
+              value={resetOnIdleMins.toString()}
+              onChange={(e) => setResetOnIdleMins(parseInt(e.target.value) || 0)}
+              placeholder="0 = disabled"
+            />
+            <p className="text-xs text-gray-400">{t('projects.resetOnIdleMinsHint', 'Automatically reset to a new session after inactivity. 0 disables this behavior.')}</p>
+          </div>
+        </Card>
+
+        {/* Auto Compress */}
+        <Card>
+          <h3 className="text-sm font-semibold text-gray-900 dark:text-white mb-4">{t('projects.autoCompress', 'Auto Compress')}</h3>
+          <div className="space-y-4 max-w-lg">
+            <div className="flex items-center justify-between">
+              <div>
+                <label className="text-sm font-medium text-gray-700 dark:text-gray-300">{t('projects.autoCompressEnabled', 'Enabled')}</label>
+                <p className="text-[11px] text-gray-400 mt-0.5">{t('projects.autoCompressEnabledHint', 'Automatically compress context when token count exceeds threshold')}</p>
+              </div>
+              <button
+                onClick={() => setAutoCompressEnabled(!autoCompressEnabled)}
+                className={cn('w-10 h-6 rounded-full transition-colors', autoCompressEnabled ? 'bg-accent' : 'bg-gray-300 dark:bg-gray-700')}
+              >
+                <div className={cn('w-4 h-4 bg-white rounded-full transition-transform mx-1', autoCompressEnabled ? 'translate-x-4' : 'translate-x-0')} />
+              </button>
+            </div>
+            {autoCompressEnabled && (
+              <>
+                <Input
+                  label={t('projects.autoCompressMaxTokens', 'Max tokens threshold')}
+                  type="number"
+                  value={autoCompressMaxTokens.toString()}
+                  onChange={(e) => setAutoCompressMaxTokens(parseInt(e.target.value) || 0)}
+                  placeholder="e.g. 100000"
+                />
+                <Input
+                  label={t('projects.autoCompressMinGapMins', 'Minimum gap (minutes)')}
+                  type="number"
+                  value={autoCompressMinGapMins.toString()}
+                  onChange={(e) => setAutoCompressMinGapMins(parseInt(e.target.value) || 30)}
+                  placeholder="default: 30"
+                />
+              </>
+            )}
           </div>
         </Card>
 

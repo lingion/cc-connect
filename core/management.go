@@ -28,6 +28,12 @@ type ProjectSettingsUpdate struct {
 	ReplyFooter          *bool
 	InjectSender         *bool
 	PlatformAllowFrom    map[string]string
+	// Session Reset on Idle
+	ResetOnIdleMins *int
+	// Auto Compress
+	AutoCompressEnabled    *bool
+	AutoCompressMaxTokens  *int
+	AutoCompressMinGapMins *int
 }
 
 // ManagementServer provides an HTTP REST API for external management tools
@@ -716,7 +722,11 @@ func (m *ManagementServer) handleProjectDetail(w http.ResponseWriter, r *http.Re
 			ReplyFooter          *bool             `json:"reply_footer"`
 			InjectSender         *bool             `json:"inject_sender"`
 			PlatformAllowFrom    map[string]string `json:"platform_allow_from"`
-		}
+			ResetOnIdleMins        *int              `json:"reset_on_idle_mins"`
+			AutoCompressEnabled    *bool             `json:"auto_compress_enabled"`
+			AutoCompressMaxTokens  *int              `json:"auto_compress_max_tokens"`
+			AutoCompressMinGapMins *int              `json:"auto_compress_min_gap_mins"`
+			}
 		if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
 			mgmtError(w, http.StatusBadRequest, "invalid JSON: "+err.Error())
 			return
@@ -761,6 +771,28 @@ func (m *ManagementServer) handleProjectDetail(w http.ResponseWriter, r *http.Re
 		if body.InjectSender != nil {
 			e.SetInjectSender(*body.InjectSender)
 		}
+		if body.ResetOnIdleMins != nil {
+			if *body.ResetOnIdleMins <= 0 {
+				e.SetResetOnIdle(0)
+			} else {
+				e.SetResetOnIdle(time.Duration(*body.ResetOnIdleMins) * time.Minute)
+			}
+		}
+		if body.AutoCompressEnabled != nil || body.AutoCompressMaxTokens != nil || body.AutoCompressMinGapMins != nil {
+			enabled := false
+			maxTokens := 0
+			minGapMins := 30
+			if body.AutoCompressEnabled != nil {
+				enabled = *body.AutoCompressEnabled
+			}
+			if body.AutoCompressMaxTokens != nil {
+				maxTokens = *body.AutoCompressMaxTokens
+			}
+			if body.AutoCompressMinGapMins != nil {
+				minGapMins = *body.AutoCompressMinGapMins
+			}
+			e.SetAutoCompressConfig(enabled, maxTokens, time.Duration(minGapMins)*time.Minute)
+		}
 
 		restartRequired := false
 		if body.AgentType != nil && *body.AgentType != e.agent.Name() {
@@ -791,6 +823,10 @@ func (m *ManagementServer) handleProjectDetail(w http.ResponseWriter, r *http.Re
 				ReplyFooter:          body.ReplyFooter,
 				InjectSender:         body.InjectSender,
 				PlatformAllowFrom:    body.PlatformAllowFrom,
+				ResetOnIdleMins:        body.ResetOnIdleMins,
+				AutoCompressEnabled:    body.AutoCompressEnabled,
+				AutoCompressMaxTokens:  body.AutoCompressMaxTokens,
+				AutoCompressMinGapMins: body.AutoCompressMinGapMins,
 			}
 			if err := m.saveProjectSettings(name, patch); err != nil {
 				slog.Warn("management: failed to persist project settings", "project", name, "error", err)
