@@ -25,10 +25,10 @@ func init() {
 // Agent drives the Cursor Agent CLI (`agent`) using --print --output-format stream-json.
 //
 // Modes (maps to Cursor agent CLI flags):
-//   - "default":  --trust only (ask permission for tools)
-//   - "force":    --trust --force (auto-approve tools unless explicitly denied)
-//   - "plan":     --trust --mode plan (read-only analysis)
-//   - "ask":      --trust --mode ask (Q&A style, read-only)
+//   - "default":  default permissions (ask permission for tools)
+//   - "force":    --force (auto-approve tools unless explicitly denied)
+//   - "plan":     --mode plan (read-only analysis)
+//   - "ask":      --mode ask (Q&A style, read-only)
 type Agent struct {
 	workDir    string
 	model      string
