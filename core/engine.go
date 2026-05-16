@@ -2938,6 +2938,10 @@ func (e *Engine) getOrCreateInteractiveStateWith(sessionKey string, p Platform, 
 			slog.Error("session resume failed, falling back to fresh session",
 				"session_key", sessionKey, "failed_session_id", startSessionID,
 				"error", err, "elapsed", startElapsed)
+			// Clear the stale session ID so CompareAndSetAgentSessionID can
+			// write the new ID, matching the relay fallback at line 12640.
+			session.SetAgentSessionID("", agent.Name())
+			sessions.Save()
 			startAt = time.Now()
 			agentSession, err = agent.StartSession(e.ctx, "")
 			startElapsed = time.Since(startAt)
@@ -8014,6 +8018,17 @@ func (e *Engine) cmdTTS(p Platform, msg *Message, args []string) {
 }
 
 func (e *Engine) cmdStop(p Platform, msg *Message) {
+	// clearStaleSessionID removes the stale AgentSessionID so the next message
+	// starts a fresh agent instead of trying to resume the killed session
+	// (recycling loop — see issue #830).
+	clearStaleSessionID := func() {
+		if _, sessions, _, err := e.commandContext(p, msg); err == nil {
+			s := sessions.GetOrCreateActive(msg.SessionKey)
+			s.SetAgentSessionID("", "")
+			sessions.Save()
+		}
+	}
+
 	iKey := e.interactiveKeyForSessionKey(msg.SessionKey)
 	if !e.stopInteractiveSession(iKey, p, msg.ReplyCtx) {
 		// Fallback: try suffix scan in case interactiveKeyForSessionKey
@@ -8021,6 +8036,7 @@ func (e *Engine) cmdStop(p Platform, msg *Message) {
 		// (e.g. workspace binding lookup inconsistency).
 		if found := e.findInteractiveKeyForSession(msg.SessionKey); found != "" && found != iKey {
 			if e.stopInteractiveSession(found, p, msg.ReplyCtx) {
+				clearStaleSessionID()
 				e.reply(p, msg.ReplyCtx, e.i18n.T(MsgExecutionStopped))
 				return
 			}
@@ -8028,6 +8044,7 @@ func (e *Engine) cmdStop(p Platform, msg *Message) {
 		e.reply(p, msg.ReplyCtx, e.i18n.T(MsgNoExecution))
 		return
 	}
+	clearStaleSessionID()
 	e.reply(p, msg.ReplyCtx, e.i18n.T(MsgExecutionStopped))
 }
 

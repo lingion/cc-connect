@@ -5860,12 +5860,16 @@ func (s *controllableAgentSession) Close() error {
 
 // controllableAgent lets tests control which session is returned by StartSession.
 type controllableAgent struct {
-	nextSession AgentSession
-	listFn      func() ([]AgentSessionInfo, error)
+	nextSession     AgentSession
+	listFn          func() ([]AgentSessionInfo, error)
+	startSessionFn  func(ctx context.Context, sessionID string) (AgentSession, error)
 }
 
 func (a *controllableAgent) Name() string { return "controllable" }
-func (a *controllableAgent) StartSession(_ context.Context, _ string) (AgentSession, error) {
+func (a *controllableAgent) StartSession(ctx context.Context, sessionID string) (AgentSession, error) {
+	if a.startSessionFn != nil {
+		return a.startSessionFn(ctx, sessionID)
+	}
 	if a.nextSession != nil {
 		return a.nextSession, nil
 	}
@@ -6159,6 +6163,78 @@ func TestSessionIDWriteback_DoesNotOverwriteExisting(t *testing.T) {
 
 	if got != "existing-uuid" {
 		t.Fatalf("AgentSessionID = %q, want %q — writeback should not overwrite", got, "existing-uuid")
+	}
+}
+
+// TestCmdStop_ClearsAgentSessionID verifies that /stop clears the stale
+// AgentSessionID so the next message starts a fresh agent instead of trying
+// to resume the killed session (issue #830).
+func TestCmdStop_ClearsAgentSessionID(t *testing.T) {
+	sess := newControllableSession("agent-1")
+	agent := &controllableAgent{nextSession: sess}
+	p := &stubPlatformEngine{n: "test"}
+	e := NewEngine("test", agent, []Platform{p}, "", LangEnglish)
+
+	key := "test:user1"
+
+	// Seed a live interactive state.
+	e.interactiveMu.Lock()
+	e.interactiveStates[key] = &interactiveState{
+		agentSession: sess,
+		platform:     p,
+		replyCtx:     "ctx",
+	}
+	e.interactiveMu.Unlock()
+
+	// Set the Session's AgentSessionID to match (simulates a normal turn).
+	active := e.sessions.GetOrCreateActive(key)
+	active.SetAgentSessionID("agent-1", "controllable")
+	e.sessions.Save()
+
+	// Simulate /stop: it uses interactiveKeyForSessionKey internally.
+	msg := &Message{SessionKey: key, ReplyCtx: "ctx"}
+	e.cmdStop(p, msg)
+
+	// After /stop, AgentSessionID must be cleared.
+	got := active.GetAgentSessionID()
+	if got != "" {
+		t.Fatalf("AgentSessionID = %q, want empty after /stop", got)
+	}
+}
+
+// TestResumeFallback_ClearsStaleSessionID verifies that when agent.StartSession
+// fails with a stale session ID and falls back to a fresh session, the stale
+// AgentSessionID is cleared so CompareAndSetAgentSessionID can write the new ID
+// (issue #830, matching the relay fallback at engine.go:12640).
+func TestResumeFallback_ClearsStaleSessionID(t *testing.T) {
+	freshSess := newControllableSession("fresh-id")
+	agent := &controllableAgent{
+		startSessionFn: func(_ context.Context, sessionID string) (AgentSession, error) {
+			if sessionID != "" {
+				return nil, errors.New("session not found")
+			}
+			return freshSess, nil
+		},
+	}
+	p := &stubPlatformEngine{n: "test"}
+	e := NewEngine("test", agent, []Platform{p}, "", LangEnglish)
+
+	key := "test:user1"
+
+	// Session has a stale AgentSessionID from a previously killed agent.
+	session := &Session{AgentSessionID: "stale-id", AgentType: "controllable"}
+
+	state := e.getOrCreateInteractiveStateWith(key, p, "ctx", session, e.sessions, nil, "")
+
+	// The new agent session should be the fresh one.
+	if state.agentSession != freshSess {
+		t.Fatal("expected fresh agent session from fallback")
+	}
+
+	// The stale ID should have been replaced with the new ID.
+	got := session.GetAgentSessionID()
+	if got != "fresh-id" {
+		t.Fatalf("AgentSessionID = %q, want %q — stale ID should be replaced", got, "fresh-id")
 	}
 }
 
