@@ -4676,6 +4676,162 @@ func TestCmdReasoning_RejectsMinimal(t *testing.T) {
 	}
 }
 
+// TestCmdReasoning_MultiWorkspaceSavesToWorkspaceSessions is a regression test
+// for the bug where cmdReasoning called e.sessions.Save() (global) instead of
+// sessions.Save() (workspace-resolved), leaving workspace session state unsaved.
+func TestCmdReasoning_MultiWorkspaceSavesToWorkspaceSessions(t *testing.T) {
+	p := &stubPlatformEngine{n: "plain"}
+	globalAgent := &stubModelModeAgent{}
+	e := NewEngine("test", globalAgent, []Platform{p}, "", LangEnglish)
+
+	baseDir := t.TempDir()
+	bindingPath := filepath.Join(t.TempDir(), "bindings.json")
+	e.SetMultiWorkspace(baseDir, bindingPath)
+
+	wsDir := normalizeWorkspacePath(t.TempDir())
+	channelID := "C-reasoning-ws"
+	e.workspaceBindings.Bind("project:test", channelID, "chan", wsDir)
+
+	ws := e.workspacePool.GetOrCreate(wsDir)
+	wsAgent := &stubModelModeAgent{}
+	ws.agent = wsAgent
+	ws.sessions = NewSessionManager("")
+
+	msg := &Message{SessionKey: "feishu:" + channelID + ":u1", ReplyCtx: "ctx"}
+
+	wsSession := ws.sessions.GetOrCreateActive(msg.SessionKey)
+	wsSession.SetAgentSessionID("ws-session-id", "test")
+	wsSession.AddHistory("user", "hello")
+
+	globalSession := e.sessions.GetOrCreateActive(msg.SessionKey)
+	globalSession.SetAgentSessionID("global-session-id", "test")
+
+	e.cmdReasoning(p, msg, []string{"3"}) // selects "high"
+
+	if wsAgent.reasoningEffort != "high" {
+		t.Fatalf("workspace agent reasoning effort = %q, want high", wsAgent.reasoningEffort)
+	}
+	if got := wsSession.GetAgentSessionID(); got != "" {
+		t.Fatalf("workspace session id = %q, want cleared", got)
+	}
+	if got := globalSession.GetAgentSessionID(); got != "global-session-id" {
+		t.Fatalf("global session id = %q, want untouched", got)
+	}
+}
+
+// TestCmdProvider_ClearMultiWorkspaceUsesWorkspaceSessions is a regression test
+// for the bug where cmdProvider "clear" used e.sessions (global) instead of
+// the workspace-resolved sessions, and called providerSaveFunc in workspace mode.
+func TestCmdProvider_ClearMultiWorkspaceUsesWorkspaceSessions(t *testing.T) {
+	p := &stubPlatformEngine{n: "plain"}
+	globalAgent := &stubProviderAgent{
+		providers: []ProviderConfig{{Name: "openai"}},
+		active:    "openai",
+	}
+	e := NewEngine("test", globalAgent, []Platform{p}, "", LangEnglish)
+
+	var savedProvider string
+	e.SetProviderSaveFunc(func(name string) error {
+		savedProvider = name
+		return nil
+	})
+
+	baseDir := t.TempDir()
+	bindingPath := filepath.Join(t.TempDir(), "bindings.json")
+	e.SetMultiWorkspace(baseDir, bindingPath)
+
+	wsDir := normalizeWorkspacePath(t.TempDir())
+	channelID := "C-provider-clear-ws"
+	e.workspaceBindings.Bind("project:test", channelID, "chan", wsDir)
+
+	ws := e.workspacePool.GetOrCreate(wsDir)
+	wsAgent := &stubProviderAgent{
+		providers: []ProviderConfig{{Name: "openai"}},
+		active:    "openai",
+	}
+	ws.agent = wsAgent
+	ws.sessions = NewSessionManager("")
+
+	msg := &Message{SessionKey: "feishu:" + channelID + ":u1", ReplyCtx: "ctx"}
+
+	wsSession := ws.sessions.GetOrCreateActive(msg.SessionKey)
+	wsSession.SetAgentSessionID("ws-session-id", "test")
+
+	globalSession := e.sessions.GetOrCreateActive(msg.SessionKey)
+	globalSession.SetAgentSessionID("global-session-id", "test")
+
+	e.cmdProvider(p, msg, []string{"clear"})
+
+	if got := wsSession.GetAgentSessionID(); got != "" {
+		t.Fatalf("workspace session id = %q, want cleared", got)
+	}
+	if got := globalSession.GetAgentSessionID(); got != "global-session-id" {
+		t.Fatalf("global session id = %q, want untouched", got)
+	}
+	// providerSaveFunc must not be called when operating on a workspace agent.
+	if savedProvider != "" {
+		t.Fatalf("providerSaveFunc was called with %q in workspace mode, want no call", savedProvider)
+	}
+}
+
+// TestSwitchProvider_MultiWorkspaceUsesWorkspaceSessions is a regression test
+// for the bug where switchProvider used e.sessions (global) instead of the
+// workspace-resolved sessions, and called providerSaveFunc in workspace mode.
+func TestSwitchProvider_MultiWorkspaceUsesWorkspaceSessions(t *testing.T) {
+	p := &stubPlatformEngine{n: "plain"}
+	globalAgent := &stubProviderAgent{
+		providers: []ProviderConfig{{Name: "openai"}, {Name: "azure"}},
+		active:    "openai",
+	}
+	e := NewEngine("test", globalAgent, []Platform{p}, "", LangEnglish)
+
+	var savedProvider string
+	e.SetProviderSaveFunc(func(name string) error {
+		savedProvider = name
+		return nil
+	})
+
+	baseDir := t.TempDir()
+	bindingPath := filepath.Join(t.TempDir(), "bindings.json")
+	e.SetMultiWorkspace(baseDir, bindingPath)
+
+	wsDir := normalizeWorkspacePath(t.TempDir())
+	channelID := "C-provider-switch-ws"
+	e.workspaceBindings.Bind("project:test", channelID, "chan", wsDir)
+
+	ws := e.workspacePool.GetOrCreate(wsDir)
+	wsAgent := &stubProviderAgent{
+		providers: []ProviderConfig{{Name: "openai"}, {Name: "azure"}},
+		active:    "openai",
+	}
+	ws.agent = wsAgent
+	ws.sessions = NewSessionManager("")
+
+	msg := &Message{SessionKey: "feishu:" + channelID + ":u1", ReplyCtx: "ctx"}
+
+	wsSession := ws.sessions.GetOrCreateActive(msg.SessionKey)
+	wsSession.SetAgentSessionID("ws-session-id", "test")
+
+	globalSession := e.sessions.GetOrCreateActive(msg.SessionKey)
+	globalSession.SetAgentSessionID("global-session-id", "test")
+
+	e.cmdProvider(p, msg, []string{"switch", "azure"})
+
+	if wsAgent.active != "azure" {
+		t.Fatalf("workspace agent active provider = %q, want azure", wsAgent.active)
+	}
+	if got := wsSession.GetAgentSessionID(); got != "" {
+		t.Fatalf("workspace session id = %q, want cleared", got)
+	}
+	if got := globalSession.GetAgentSessionID(); got != "global-session-id" {
+		t.Fatalf("global session id = %q, want untouched", got)
+	}
+	// providerSaveFunc must not be called when operating on a workspace agent.
+	if savedProvider != "" {
+		t.Fatalf("providerSaveFunc was called with %q in workspace mode, want no call", savedProvider)
+	}
+}
+
 func TestCmdMode_UsesInlineButtonsOnButtonOnlyPlatform(t *testing.T) {
 	p := &stubInlineButtonPlatform{stubPlatformEngine: stubPlatformEngine{n: "inline-only"}}
 	agent := &stubModelModeAgent{}
