@@ -9193,7 +9193,16 @@ func (e *Engine) sendWithError(p Platform, replyCtx any, content string) error {
 func (e *Engine) sendAlreadyRenderedWithError(p Platform, replyCtx any, content string) error {
 	start := time.Now()
 	if err := p.Send(e.ctx, replyCtx, content); err != nil {
-		slog.Error("platform send failed", "platform", p.Name(), "error", err, "content_len", len(content))
+		// Check for context_token missing error (common for Weixin platform)
+		if strings.Contains(err.Error(), "missing context_token") {
+			slog.Error("platform send failed: context_token missing",
+				"platform", p.Name(),
+				"error", err,
+				"content_len", len(content),
+				"hint", "user needs to send a new message to refresh context_token")
+		} else {
+			slog.Error("platform send failed", "platform", p.Name(), "error", err, "content_len", len(content))
+		}
 		return err
 	}
 	if elapsed := time.Since(start); elapsed >= slowPlatformSend {

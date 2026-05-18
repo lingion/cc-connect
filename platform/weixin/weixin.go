@@ -614,7 +614,11 @@ func (p *Platform) sendChunks(ctx context.Context, replyCtx any, content string)
 		rc.contextToken = p.getContextToken(rc.peerUserID)
 	}
 	if strings.TrimSpace(rc.contextToken) == "" {
-		return fmt.Errorf("weixin: missing context_token for peer %q", rc.peerUserID)
+		slog.Error("weixin: cannot send message - missing context_token",
+			"peer", rc.peerUserID,
+			"content_preview", truncatePreview(content, 100),
+			"hint", "user needs to send a new message to refresh context_token")
+		return fmt.Errorf("weixin: missing context_token for peer %q - user must send a new message first", rc.peerUserID)
 	}
 	if strings.TrimSpace(content) == "" {
 		return nil
@@ -691,6 +695,13 @@ func (p *Platform) sendChunkWithRetry(ctx context.Context, rc *replyContext, chu
 		return err
 	}
 	return lastErr
+}
+
+func truncatePreview(s string, max int) string {
+	if len(s) <= max {
+		return s
+	}
+	return s[:max] + "..."
 }
 
 func splitUTF8(s string, maxRunes int) []string {
