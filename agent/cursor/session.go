@@ -77,7 +77,6 @@ func (cs *cursorSession) Send(prompt string, images []core.ImageAttachment, file
 	args := []string{
 		"--print",
 		"--output-format", "stream-json",
-		"--trust",
 	}
 
 	switch cs.mode {
@@ -436,7 +435,7 @@ func (cs *cursorSession) handleResult(raw map[string]any) {
 	}
 }
 
-// RespondPermission is a no-op — Cursor Agent permissions are handled via --trust/--force flags.
+// RespondPermission is a no-op — Cursor Agent permissions are handled via CLI default behavior or --force flag.
 func (cs *cursorSession) RespondPermission(_ string, _ core.PermissionResult) error {
 	return nil
 }
