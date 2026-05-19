@@ -78,6 +78,13 @@ func NewEnvWithSetup(t *testing.T, agentType string, setup func(*core.Engine)) *
 	opts := map[string]any{
 		"work_dir": workDir,
 	}
+
+	// Cursor requires force/yolo mode in automated tests to bypass interactive
+	// workspace-trust prompts. Without --force the agent exits immediately.
+	if agentType == "cursor" {
+		opts["mode"] = "force"
+	}
+
 	applyProviderFromEnv(t, agentType, opts)
 
 	agent, err := core.CreateAgent(agentType, opts)
@@ -250,12 +257,23 @@ func (e *Env) SessionKeyFor(userID, chatID string) string {
 func requireAgent(t *testing.T, agentType string) {
 	t.Helper()
 
+	// agentBinName returns the primary CLI binary name for the agent type.
+	// The cursor type uses "agent" (from @anthropic-ai/cursor-agent), not
+	// the Cursor IDE "cursor" binary.
 	bin := agentBinName(agentType)
 	if bin == "" {
 		t.Skipf("blackbox skip: unknown agent type %q", agentType)
 	}
 	if _, err := exec.LookPath(bin); err != nil {
-		t.Skipf("blackbox skip: %s binary %q not in PATH", agentType, bin)
+		// For cursor, also accept if the "cursor" IDE binary is present
+		// (some setups install it under that name instead).
+		if agentType == "cursor" {
+			if _, err2 := exec.LookPath("cursor"); err2 != nil {
+				t.Skipf("blackbox skip: cursor agent binary %q not in PATH (also checked 'cursor')", bin)
+			}
+		} else {
+			t.Skipf("blackbox skip: %s binary %q not in PATH", agentType, bin)
+		}
 	}
 
 	switch agentType {
@@ -272,8 +290,12 @@ func requireAgent(t *testing.T, agentType string) {
 			t.Skipf("blackbox skip: GEMINI_API_KEY or GOOGLE_API_KEY not set")
 		}
 	case "cursor":
-		if os.Getenv("ANTHROPIC_API_KEY") == "" && os.Getenv("CURSOR_API_KEY") == "" && !hasProviderEnv("cursor") {
-			t.Skipf("blackbox skip: ANTHROPIC_API_KEY or CURSOR_API_KEY not set")
+		// Cursor can run without an explicit API key if the user is already
+		// authenticated via `cursor login`. Only skip when the binary is absent
+		// (handled above). Let it fail naturally with an auth error if needed.
+	case "opencode":
+		if os.Getenv("ANTHROPIC_API_KEY") == "" && !hasProviderEnv("opencode") {
+			t.Skipf("blackbox skip: ANTHROPIC_API_KEY not set for opencode")
 		}
 	}
 }
@@ -308,6 +330,11 @@ func applyProviderFromEnv(t *testing.T, agentType string, opts map[string]any) {
 			baseURL = os.Getenv("OPENAI_BASE_URL")
 		case "gemini":
 			apiKey = firstNonEmpty(os.Getenv("GEMINI_API_KEY"), os.Getenv("GOOGLE_API_KEY"))
+		case "opencode":
+			apiKey = os.Getenv("ANTHROPIC_API_KEY")
+			baseURL = os.Getenv("ANTHROPIC_BASE_URL")
+		case "cursor":
+			apiKey = firstNonEmpty(os.Getenv("CURSOR_API_KEY"), os.Getenv("ANTHROPIC_API_KEY"))
 		}
 	}
 
@@ -328,10 +355,15 @@ func applyProviderFromEnv(t *testing.T, agentType string, opts map[string]any) {
 //
 // Supported env vars (prefix = CC_BLACKBOX_<AGENTTYPE>_):
 //
-//	<prefix>API_KEY   — required
-//	<prefix>BASE_URL  — provider base URL
+//	<prefix>API_KEY   — required (except cursor which can use local login)
+//	<prefix>BASE_URL  — provider base URL / proxy endpoint
 //	<prefix>MODEL     — model override
 //	<prefix>WIRE_API  — codex wire API format, e.g. "chat" or "responses"
+//
+// Agent-specific base URL injection:
+//   - claudecode: base_url → stored in ProviderConfig.BaseURL (provider sets ANTHROPIC_BASE_URL)
+//   - opencode:   base_url → injected as ANTHROPIC_BASE_URL env var via ProviderConfig.Env
+//   - cursor:     no base_url injection (uses CURSOR_API_KEY or local auth)
 func wireProviders(t *testing.T, agentType string, agent core.Agent) {
 	t.Helper()
 	ps, ok := agent.(core.ProviderSwitcher)
@@ -345,7 +377,13 @@ func wireProviders(t *testing.T, agentType string, agent core.Agent) {
 	model := os.Getenv(prefix + "MODEL")
 	wireAPI := os.Getenv(prefix + "WIRE_API")
 
-	if apiKey == "" {
+	// Skip if no explicit API key override (opencode and cursor can fall back
+	// to their native auth from env or local login).
+	if apiKey == "" && agentType != "cursor" && agentType != "opencode" {
+		return
+	}
+	// For cursor/opencode with no API key, still wire a provider if we have model.
+	if apiKey == "" && model == "" {
 		return
 	}
 
@@ -356,6 +394,17 @@ func wireProviders(t *testing.T, agentType string, agent core.Agent) {
 		Model:        model,
 		CodexWireAPI: wireAPI,
 	}
+
+	// opencode's providerEnvLocked only injects APIKey (as ANTHROPIC_API_KEY)
+	// and the Env map. To use a custom proxy (e.g. minimax), inject BaseURL as
+	// ANTHROPIC_BASE_URL via the Env map so opencode picks it up.
+	if agentType == "opencode" && baseURL != "" {
+		if provider.Env == nil {
+			provider.Env = make(map[string]string)
+		}
+		provider.Env["ANTHROPIC_BASE_URL"] = baseURL
+	}
+
 	ps.SetProviders([]core.ProviderConfig{provider})
 	ps.SetActiveProvider("blackbox-test")
 	t.Logf("blackbox: wired provider base_url=%s model=%s wire_api=%s", baseURL, model, wireAPI)
@@ -370,7 +419,10 @@ func agentBinName(agentType string) string {
 	case "gemini":
 		return "gemini"
 	case "cursor":
-		return "cursor"
+		// Cursor Agent CLI installed via npm: @anthropic-ai/cursor-agent.
+		// The binary is named "agent" by default; some installations also link
+		// it as "cursor". We try "agent" first.
+		return "agent"
 	case "opencode":
 		return "opencode"
 	case "qoder":
