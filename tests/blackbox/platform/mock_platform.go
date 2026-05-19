@@ -136,6 +136,12 @@ func (p *MockPlatform) InjectMessageWithAttachments(
 	go p.handler(p, msg)
 }
 
+// InjectRawMessage injects a pre-built core.Message directly into the engine.
+// Use this when replaying fixtures that already have full session/user fields.
+func (p *MockPlatform) InjectRawMessage(msg *core.Message) {
+	go p.handler(p, msg)
+}
+
 // ── Assertion helpers ────────────────────────────────────────────────────────
 
 // WaitForTurnComplete waits until the message stream has been "stable" —

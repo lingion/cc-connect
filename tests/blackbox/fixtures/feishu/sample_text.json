@@ -1,0 +1,20 @@
+{
+  "schema_version": 1,
+  "captured_at": "2026-01-01T00:00:00Z",
+  "platform": "feishu",
+  "message_type": "text",
+  "message": {
+    "platform": "feishu",
+    "session_key": "feishu:oc_SAMPLE:ou_SAMPLE",
+    "message_id": "om_SAMPLE001",
+    "chat_name": "Sample Group",
+    "user_id": "ou_S***",
+    "user_name": "Alice",
+    "content": "Hello, can you help me?",
+    "images_count": 0,
+    "files_count": 0,
+    "has_audio": false,
+    "is_group_chat": true,
+    "is_mentioned": false
+  }
+}
