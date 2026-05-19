@@ -53,6 +53,21 @@ type Env struct {
 //
 // A successful NewEnv call registers a t.Cleanup that stops the engine.
 func NewEnv(t *testing.T, agentType string) *Env {
+	return NewEnvWithSetup(t, agentType, nil)
+}
+
+// NewEnvWithSetup is like NewEnv but accepts an optional setup function that
+// is called after the engine is created but BEFORE engine.Start(). Use this
+// to configure engine options (display, banned words, disabled commands, etc.)
+// that must be set before the engine begins processing messages.
+//
+// Example:
+//
+//	env := helper.NewEnvWithSetup(t, "claudecode", func(e *core.Engine) {
+//	    e.SetShowContextIndicator(false)
+//	    e.SetBannedWords([]string{"secret"})
+//	})
+func NewEnvWithSetup(t *testing.T, agentType string, setup func(*core.Engine)) *Env {
 	t.Helper()
 
 	requireAgent(t, agentType)
@@ -76,6 +91,10 @@ func NewEnv(t *testing.T, agentType string) *Env {
 
 	sessPath := filepath.Join(dataDir, "sessions.json")
 	engine := core.NewEngine("blackbox-"+t.Name(), agent, []core.Platform{mp}, sessPath, core.LangEnglish)
+
+	if setup != nil {
+		setup(engine)
+	}
 
 	if err := engine.Start(); err != nil {
 		t.Fatalf("blackbox: engine.Start failed: %v", err)
