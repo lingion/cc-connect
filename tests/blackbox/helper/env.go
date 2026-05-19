@@ -306,6 +306,13 @@ func applyProviderFromEnv(t *testing.T, agentType string, opts map[string]any) {
 // wireProviders calls SetProviders on the agent when CC_BLACKBOX_<AGENT>_API_KEY
 // is set, giving agents (e.g. claudecode) their credentials via the provider
 // interface rather than relying solely on ANTHROPIC_API_KEY env vars.
+//
+// Supported env vars (prefix = CC_BLACKBOX_<AGENTTYPE>_):
+//
+//	<prefix>API_KEY   — required
+//	<prefix>BASE_URL  — provider base URL
+//	<prefix>MODEL     — model override
+//	<prefix>WIRE_API  — codex wire API format, e.g. "chat" or "responses"
 func wireProviders(t *testing.T, agentType string, agent core.Agent) {
 	t.Helper()
 	ps, ok := agent.(core.ProviderSwitcher)
@@ -317,20 +324,22 @@ func wireProviders(t *testing.T, agentType string, agent core.Agent) {
 	apiKey := os.Getenv(prefix + "API_KEY")
 	baseURL := os.Getenv(prefix + "BASE_URL")
 	model := os.Getenv(prefix + "MODEL")
+	wireAPI := os.Getenv(prefix + "WIRE_API")
 
 	if apiKey == "" {
 		return
 	}
 
 	provider := core.ProviderConfig{
-		Name:    "blackbox-test",
-		APIKey:  apiKey,
-		BaseURL: baseURL,
-		Model:   model,
+		Name:         "blackbox-test",
+		APIKey:       apiKey,
+		BaseURL:      baseURL,
+		Model:        model,
+		CodexWireAPI: wireAPI,
 	}
 	ps.SetProviders([]core.ProviderConfig{provider})
 	ps.SetActiveProvider("blackbox-test")
-	t.Logf("blackbox: wired provider base_url=%s model=%s", baseURL, model)
+	t.Logf("blackbox: wired provider base_url=%s model=%s wire_api=%s", baseURL, model, wireAPI)
 }
 
 func agentBinName(agentType string) string {
