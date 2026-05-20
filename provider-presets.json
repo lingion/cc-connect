@@ -1,6 +1,6 @@
 {
   "version": 2,
-  "updated_at": "2026-05-19",
+  "updated_at": "2026-05-20",
   "providers": [
     {
       "name": "minimax",
@@ -182,6 +182,29 @@
           "base_url": "https://www.dmxapi.cn/v1",
           "model": "claude-sonnet-4-20250514",
           "models": ["claude-sonnet-4-20250514", "claude-opus-4-20250514"]
+        }
+      }
+    },
+    {
+      "name": "camel",
+      "display_name": "CaMeL",
+      "invite_url": "https://camel.kr777.top/register?aff=V2z8",
+      "description": "In-depth cooperation with major research institutes and supercomputing centers, self-developed high-stability high-efficiency cache scheduling solution. Exclusive cc-connect benefit: New users get $10 credit upon registration!",
+      "description_zh": "携手各大科研院所、超算中心深度合作，自研高稳高效缓存调度方案。CC-Connect专享新人注册认证即送$10！",
+      "features": ["Research Institutes", "Cache Scheduling", "$10 New User Credit"],
+      "tier": 2,
+      "website": "https://camel.kr777.top",
+      "agents": {
+        "claudecode": {
+          "base_url": "https://api.camel.kr777.top",
+          "model": "claude-sonnet-4-20250514",
+          "models": ["claude-sonnet-4-20250514", "claude-opus-4-20250514"]
+        },
+        "codex": {
+          "base_url": "https://api.camel.kr777.top/v1",
+          "model": "gpt-5.4",
+          "models": ["gpt-5.4"],
+          "codex_config": { "wire_api": "responses" }
         }
       }
     },
