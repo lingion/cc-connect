@@ -6134,7 +6134,9 @@ func (e *Engine) cmdDiff(p Platform, msg *Message, raw string) {
 			htmlData, err := e.diff2html(ctx, diffOutput, workDir, title)
 			if err == nil {
 				fileName := fmt.Sprintf("%s-%s.html", currentBranch, commitID)
-				_ = e.waitOutgoing(p)
+				if err := e.waitOutgoing(p); err != nil {
+					slog.Warn("outgoing rate limit", "platform", p.Name(), "error", err)
+				}
 				if err := fileSender.SendFile(e.ctx, msg.ReplyCtx, FileAttachment{
 					MimeType: "text/html", Data: htmlData, FileName: fileName,
 				}); err == nil {
@@ -9737,9 +9739,13 @@ func (e *Engine) executeCardAction(cmd, args, sessionKey string) {
 		sub, id := subArgs[0], subArgs[1]
 		switch sub {
 		case "enable":
-			_ = e.cronScheduler.EnableJob(id)
+			if err := e.cronScheduler.EnableJob(id); err != nil {
+				slog.Error("cron: enable job failed", "id", id, "error", err)
+			}
 		case "disable":
-			_ = e.cronScheduler.DisableJob(id)
+			if err := e.cronScheduler.DisableJob(id); err != nil {
+				slog.Error("cron: disable job failed", "id", id, "error", err)
+			}
 		case "delete":
 			e.cronScheduler.RemoveJob(id)
 		case "mute":
