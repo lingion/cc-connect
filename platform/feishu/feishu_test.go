@@ -206,6 +206,98 @@ func TestDispatchMessageIncludesQuotedImage(t *testing.T) {
 	}
 }
 
+func TestDispatchMessageKeepsMentionOnlyQuotedText(t *testing.T) {
+	const appID = "cli_quote_text"
+	const appSecret = "secret-quote-text"
+	const parentMessageID = "om_parent_text"
+
+	got := make(chan *core.Message, 1)
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch {
+		case r.URL.Path == "/open-apis/auth/v3/tenant_access_token/internal":
+			w.Header().Set("Content-Type", "application/json")
+			writeJSON(t, w, map[string]any{
+				"code":                0,
+				"msg":                 "success",
+				"expire":              7200,
+				"tenant_access_token": "tenant-token",
+			})
+		case r.URL.Path == "/open-apis/im/v1/messages/"+parentMessageID:
+			w.Header().Set("Content-Type", "application/json")
+			writeJSON(t, w, map[string]any{
+				"code": 0,
+				"msg":  "success",
+				"data": map[string]any{
+					"items": []map[string]any{
+						{
+							"msg_type":  "text",
+							"parent_id": "",
+							"sender": map[string]any{
+								"id":          "ou_parent",
+								"sender_type": "user",
+							},
+							"body": map[string]any{
+								"content": `{"text":"请总结这条消息"}`,
+							},
+						},
+					},
+				},
+			})
+		case strings.HasPrefix(r.URL.Path, "/open-apis/contact/v3/users/"):
+			w.Header().Set("Content-Type", "application/json")
+			writeJSON(t, w, map[string]any{"code": 0, "msg": "success"})
+		case strings.HasPrefix(r.URL.Path, "/open-apis/im/v1/chats/"):
+			w.Header().Set("Content-Type", "application/json")
+			writeJSON(t, w, map[string]any{"code": 0, "msg": "success"})
+		default:
+			t.Fatalf("unexpected path %s", r.URL.Path)
+		}
+	}))
+	defer srv.Close()
+
+	p := &Platform{
+		platformName: "feishu",
+		domain:       srv.URL,
+		appID:        appID,
+		appSecret:    appSecret,
+		botOpenID:    "ou_bot",
+		client: lark.NewClient(appID, appSecret,
+			lark.WithOpenBaseUrl(srv.URL),
+			lark.WithHttpClient(srv.Client()),
+		),
+		handler: func(_ core.Platform, msg *core.Message) {
+			got <- msg
+		},
+	}
+
+	p.dispatchMessage(
+		context.Background(),
+		"text",
+		`{"text":"@bot"}`,
+		[]*larkim.MentionEvent{
+			{Key: strPtr("@bot"), Id: &larkim.UserId{OpenId: strPtr("ou_bot")}, Name: strPtr("Bot")},
+		},
+		"om_child",
+		"feishu:oc_chat:ou_user",
+		"ou_user",
+		"oc_chat",
+		replyContext{messageID: "om_child", sessionKey: "feishu:oc_chat:ou_user"},
+		parentMessageID,
+	)
+
+	select {
+	case msg := <-got:
+		if msg.Content != "" {
+			t.Fatalf("Content = %q, want empty user text after bot mention stripping", msg.Content)
+		}
+		if !strings.Contains(msg.ExtraContent, "请总结这条消息") {
+			t.Fatalf("ExtraContent = %q, want quoted text", msg.ExtraContent)
+		}
+	case <-time.After(2 * time.Second):
+		t.Fatal("timed out waiting for mention-only quoted text message")
+	}
+}
+
 func TestIsMessageRecalledDetectsWithdrawnMessageFromGetAPI(t *testing.T) {
 	const appID = "cli_recall_probe"
 	const appSecret = "secret-recall-probe"

@@ -560,48 +560,48 @@ func (p *Platform) onCardAction(event *callback.CardActionTriggerEvent) (*callba
 				},
 			}, nil
 		}
-	if p.cardNavHandler != nil {
-		done := make(chan *core.Card, 1)
-		go func() {
-			done <- p.cardNavHandler(actionVal, sessionKey)
-		}()
+		if p.cardNavHandler != nil {
+			done := make(chan *core.Card, 1)
+			go func() {
+				done <- p.cardNavHandler(actionVal, sessionKey)
+			}()
 
-		select {
-		case card := <-done:
-			if card != nil {
+			select {
+			case card := <-done:
+				if card != nil {
+					return &callback.CardActionTriggerResponse{
+						Card: &callback.Card{
+							Type: "raw",
+							Data: renderCardMap(card, sessionKey),
+						},
+					}, nil
+				}
+			case <-time.After(cardNavTimeout):
+				go func() {
+					card := <-done
+					if card == nil {
+						return
+					}
+					if refresher, ok := p.self.(core.CardRefresher); ok {
+						if err := refresher.RefreshCard(context.Background(), sessionKey, card); err != nil {
+							slog.Warn(p.tag()+": async card refresh failed", "action", actionVal, "err", err)
+						}
+					}
+				}()
 				return &callback.CardActionTriggerResponse{
-					Card: &callback.Card{
-						Type: "raw",
-						Data: renderCardMap(card, sessionKey),
+					Toast: &callback.Toast{
+						Type:    "info",
+						Content: "⏳ Loading... / 加载中...",
 					},
 				}, nil
 			}
-		case <-time.After(cardNavTimeout):
-			go func() {
-				card := <-done
-				if card == nil {
-					return
-				}
-				if refresher, ok := p.self.(core.CardRefresher); ok {
-					if err := refresher.RefreshCard(context.Background(), sessionKey, card); err != nil {
-						slog.Warn(p.tag()+": async card refresh failed", "action", actionVal, "err", err)
-					}
-				}
-			}()
-			return &callback.CardActionTriggerResponse{
-				Toast: &callback.Toast{
-					Type:    "info",
-					Content: "⏳ Loading... / 加载中...",
-				},
-			}, nil
 		}
-	}
-	if strings.HasPrefix(actionVal, "act:") {
-		slog.Debug(p.tag()+": card action produced no card update", "action", actionVal)
+		if strings.HasPrefix(actionVal, "act:") {
+			slog.Debug(p.tag()+": card action produced no card update", "action", actionVal)
+			return nil, nil
+		}
+		slog.Warn(p.tag()+": card nav returned nil, ignoring", "action", actionVal)
 		return nil, nil
-	}
-	slog.Warn(p.tag()+": card nav returned nil, ignoring", "action", actionVal)
-	return nil, nil
 	}
 
 	// perm: — permission response with in-place card update
@@ -1091,7 +1091,7 @@ func (p *Platform) dispatchMessage(ctx context.Context, msgType, content string,
 			return
 		}
 		text := stripMentions(textBody.Text, mentions, p.botOpenID)
-		if text == "" {
+		if text == "" && quoted.text == "" && len(quoted.images) == 0 {
 			slog.Debug(p.tag()+": dropping empty text after mention stripping",
 				"message_id", messageID,
 				"raw_text_len", len(textBody.Text),
@@ -1164,7 +1164,7 @@ func (p *Platform) dispatchMessage(ctx context.Context, msgType, content string,
 	case "post":
 		textParts, images := p.parsePostContent(messageID, content)
 		text := stripMentions(strings.Join(textParts, "\n"), mentions, p.botOpenID)
-		if text == "" && len(images) == 0 {
+		if text == "" && len(images) == 0 && quoted.text == "" && len(quoted.images) == 0 {
 			return
 		}
 		p.dispatchCoreMessage(&core.Message{

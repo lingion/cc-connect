@@ -4980,6 +4980,28 @@ func TestHandleMessage_ExtraContentPreservedThroughAlias(t *testing.T) {
 	}
 }
 
+func TestHandleMessage_ExtraContentOnlyIsProcessed(t *testing.T) {
+	p := &stubPlatformEngine{n: "test"}
+	agent := &stubAgent{}
+	e := NewEngine("test", agent, []Platform{p}, "", LangEnglish)
+
+	msg := &Message{
+		SessionKey:   "test:user1",
+		ReplyCtx:     "ctx",
+		Content:      "",
+		ExtraContent: "> quoted reply context",
+		Platform:     "test",
+		UserID:       "user1",
+		MessageID:    "m-extra-only",
+	}
+
+	e.handleMessage(p, msg)
+
+	if msg.Content != "> quoted reply context" {
+		t.Fatalf("Content = %q, want ExtraContent to become message content", msg.Content)
+	}
+}
+
 func TestCmdDiff_RejectsDashTarget(t *testing.T) {
 	p := &stubPlatformEngine{n: "test"}
 	e := NewEngine("test", &stubAgent{}, []Platform{p}, "", LangEnglish)
