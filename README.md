@@ -67,13 +67,18 @@ MiniMax-M2.7 is a next-generation large language model designed for autonomous e
 </tr>
 
 <tr>
-<td width="150"><a href="https://nekocode.ai/?aff=CC-CONNECT"><img src="assets/sponsors/nekocode.jpg" alt="NekoCode" width="120"></a></td>
-<td>Thanks to NekoCode for sponsoring this project! NekoCode provides reliable, stable, and efficient API relay services for Claude and CodeX with transparent pricing. Exclusive 10% discount for cc-connect users with promo code: CC-CONNECT. High-value, stable AI model access for developers. Register via <a href="https://nekocode.ai/?aff=CC-CONNECT">this link</a>.</td>
+<td width="150"><a href="https://www.dmxapi.cn/register?aff=NDln"><img src="assets/sponsors/dmx-en.jpg" alt="DMXAPI" width="120"></a></td>
+<td>Thanks to DMXAPI for sponsoring this project! DMXAPI provides global large model API services to 200+ enterprise users. One API key for all global models. Features include: instant invoicing, unlimited concurrency, starting from $0.15, 24/7 technical support. GPT/Claude/Gemini all at 32% off, domestic models 20-50% off, Claude Code exclusive models at 66% off! Register via <a href="https://www.dmxapi.cn/register?aff=NDln">this link</a>.</td>
 </tr>
 
 <tr>
-<td width="150"><a href="https://www.dmxapi.cn/register?aff=NDln"><img src="assets/sponsors/dmx-en.jpg" alt="DMXAPI" width="120"></a></td>
-<td>Thanks to DMXAPI for sponsoring this project! DMXAPI provides global large model API services to 200+ enterprise users. One API key for all global models. Features include: instant invoicing, unlimited concurrency, starting from $0.15, 24/7 technical support. GPT/Claude/Gemini all at 32% off, domestic models 20-50% off, Claude Code exclusive models at 66% off! Register via <a href="https://www.dmxapi.cn/register?aff=NDln">this link</a>.</td>
+<td width="150"><a href="https://apikey.fun/register?aff=cc_connect"><img src="assets/sponsors/apikeyfun.png" alt="APIKEY.FUN" width="120"></a></td>
+<td>Thanks to APIKEY.FUN for sponsoring this project! APIKEY.FUN is a professional enterprise-grade AI relay service, dedicated to providing stable, efficient, and cost-effective AI model API access for enterprises and individual developers. The platform supports Claude, OpenAI, Gemini and other mainstream models, with prices as low as 7% of official rates. Register via <a href="https://apikey.fun/register?aff=cc_connect">this link</a> to enjoy an exclusive permanent 5% discount on all top-ups!</td>
+</tr>
+
+<tr>
+<td width="150"><a href="https://nekocode.ai/?aff=CC-CONNECT"><img src="assets/sponsors/nekocode.jpg" alt="NekoCode" width="120"></a></td>
+<td>Thanks to NekoCode for sponsoring this project! NekoCode provides reliable, stable, and efficient API relay services for Claude and CodeX with transparent pricing. Exclusive 10% discount for cc-connect users with promo code: CC-CONNECT. High-value, stable AI model access for developers. Register via <a href="https://nekocode.ai/?aff=CC-CONNECT">this link</a>.</td>
 </tr>
 
 <tr>

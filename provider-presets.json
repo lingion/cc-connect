@@ -1,6 +1,6 @@
 {
   "version": 2,
-  "updated_at": "2026-05-20",
+  "updated_at": "2026-05-23",
   "providers": [
     {
       "name": "minimax",
@@ -202,6 +202,29 @@
         },
         "codex": {
           "base_url": "https://api.camel.kr777.top/v1",
+          "model": "gpt-5.4",
+          "models": ["gpt-5.4"],
+          "codex_config": { "wire_api": "responses" }
+        }
+      }
+    },
+    {
+      "name": "apikeyfun",
+      "display_name": "APIKEY.FUN",
+      "invite_url": "https://apikey.fun/register?aff=cc_connect",
+      "description": "Enterprise-grade AI relay service. Claude, OpenAI, Gemini models from 7% of official price. Exclusive 5% permanent discount for cc-connect users!",
+      "description_zh": "企业级 AI 中转站，Claude/OpenAI/Gemini 模型低至官方 7% 折，cc-connect 用户专属 95 折永久优惠！",
+      "features": ["Enterprise", "Claude/OpenAI/Gemini", "7% Price", "95折"],
+      "tier": 2,
+      "website": "https://apikey.fun",
+      "agents": {
+        "claudecode": {
+          "base_url": "https://api.apikey.fun",
+          "model": "claude-sonnet-4-20250514",
+          "models": ["claude-sonnet-4-20250514", "claude-opus-4-20250514"]
+        },
+        "codex": {
+          "base_url": "https://api.apikey.fun/v1",
           "model": "gpt-5.4",
           "models": ["gpt-5.4"],
           "codex_config": { "wire_api": "responses" }
