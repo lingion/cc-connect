@@ -13,6 +13,7 @@ Beta release with blackbox testing infrastructure, cursor/opencode agent support
 - **Feishu footer asterisks**: strip asterisks from footer to prevent Feishu markdown italic rendering
 - **Kimi session UUID**: capture session UUID from stderr instead of stdout
 - **Codex stdio sentinel**: add stdio sentinel for Codex app_server backend
+- **Windows cross-compile**: add missing `CheckLinger` stub to `daemon/windows.go` and `daemon/unsupported.go` so `make release-all` succeeds for all target platforms
 
 ## v1.3.3-beta.2 (2026-05-09)
 

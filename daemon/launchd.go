@@ -25,6 +25,11 @@ var runLaunchctl = func(args ...string) (string, error) {
 
 type launchdManager struct{}
 
+// CheckLinger is a no-op on darwin (always returns false).
+func CheckLinger() (enabled bool, user string) {
+	return false, ""
+}
+
 func newPlatformManager() (Manager, error) {
 	return &launchdManager{}, nil
 }
