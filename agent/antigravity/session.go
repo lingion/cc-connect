@@ -11,6 +11,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"regexp"
 	"sort"
 	"strings"
 	"sync"
@@ -32,12 +33,15 @@ type antigravitySession struct {
 	stdin     io.WriteCloser
 	stdinMu   sync.Mutex
 	closeOnce sync.Once
+	permReqID atomic.Value // stores string
 	chatID    atomic.Value // stores string
 	ctx       context.Context
 	cancel    context.CancelFunc
 	wg        sync.WaitGroup
 	alive     atomic.Bool
 }
+
+var permissionPromptPattern = regexp.MustCompile(`(?is)(allow|approve|permission).{0,400}(\(y/n\)|\(y\/n\)|\(y\/N\)|\(Y\/n\)|\[y\/n\]|\[y\/N\]|\[Y\/n\]|yes\/no)`)
 
 func newAntigravitySession(ctx context.Context, cmd, workDir, model, mode, resumeID string, extraEnv []string, timeout time.Duration) (*antigravitySession, error) {
 	sessionCtx, cancel := context.WithCancel(ctx)
@@ -265,11 +269,33 @@ func (as *antigravitySession) readLoop(ctx context.Context, cmd *exec.Cmd, stdou
 
 	reader := bufio.NewReader(stdout)
 	buf := make([]byte, 1024)
+	permWindow := ""
 
 	for {
 		n, err := reader.Read(buf)
 		if n > 0 {
 			text := string(buf[:n])
+			permWindow += text
+			if len(permWindow) > 4096 {
+				permWindow = permWindow[len(permWindow)-4096:]
+			}
+			if pending, _ := as.permReqID.Load().(string); pending == "" {
+				if prompt, ok := extractPermissionPrompt(permWindow); ok {
+					requestID := fmt.Sprintf("agy-perm-%d", time.Now().UnixNano())
+					as.permReqID.Store(requestID)
+					select {
+					case as.events <- core.Event{
+						Type:         core.EventPermissionRequest,
+						RequestID:    requestID,
+						ToolName:     "terminal_permission",
+						ToolInput:    prompt,
+						ToolInputRaw: map[string]any{"prompt": prompt},
+					}:
+					case <-as.ctx.Done():
+						return
+					}
+				}
+			}
 			select {
 			case as.events <- core.Event{Type: core.EventText, Content: text}:
 			case <-as.ctx.Done():
@@ -365,9 +391,24 @@ func (as *antigravitySession) detectNewSessionID(preEntries map[string]bool, sen
 	return candidates[0].sessionID
 }
 
-func (as *antigravitySession) RespondPermission(_ string, result core.PermissionResult) error {
+func extractPermissionPrompt(text string) (string, bool) {
+	loc := permissionPromptPattern.FindStringIndex(text)
+	if loc == nil {
+		return "", false
+	}
+	prompt := strings.TrimSpace(text[loc[0]:loc[1]])
+	if prompt == "" {
+		return "", false
+	}
+	return prompt, true
+}
+
+func (as *antigravitySession) RespondPermission(requestID string, result core.PermissionResult) error {
 	if !as.alive.Load() {
 		return fmt.Errorf("session is closed")
+	}
+	if pending, _ := as.permReqID.Load().(string); pending != "" && requestID != "" && requestID != pending {
+		return fmt.Errorf("permission request mismatch: got %q, pending %q", requestID, pending)
 	}
 	as.stdinMu.Lock()
 	defer as.stdinMu.Unlock()
@@ -384,6 +425,7 @@ func (as *antigravitySession) RespondPermission(_ string, result core.Permission
 	if err != nil {
 		return fmt.Errorf("write permission response: %w", err)
 	}
+	as.permReqID.Store("")
 	return nil
 }
 

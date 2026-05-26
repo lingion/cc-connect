@@ -96,6 +96,7 @@ func TestRespondPermission_WritesTerminalAnswer(t *testing.T) {
 	defer w.Close()
 	s.stdin = w
 
+	s.permReqID.Store("req")
 	if err := s.RespondPermission("req", core.PermissionResult{Behavior: "allow"}); err != nil {
 		t.Fatalf("RespondPermission allow: %v", err)
 	}
@@ -108,6 +109,7 @@ func TestRespondPermission_WritesTerminalAnswer(t *testing.T) {
 		t.Fatalf("allow response = %q, want %q", got, "y\n")
 	}
 
+	s.permReqID.Store("req")
 	if err := s.RespondPermission("req", core.PermissionResult{Behavior: "deny"}); err != nil {
 		t.Fatalf("RespondPermission deny: %v", err)
 	}
@@ -117,6 +119,26 @@ func TestRespondPermission_WritesTerminalAnswer(t *testing.T) {
 	}
 	if got := string(buf[:n]); got != "n\n" {
 		t.Fatalf("deny response = %q, want %q", got, "n\n")
+	}
+}
+
+func TestExtractPermissionPrompt(t *testing.T) {
+	text := "Tool wants to run command. Allow this action? (y/N)"
+	got, ok := extractPermissionPrompt(text)
+	if !ok {
+		t.Fatalf("expected permission prompt to be detected")
+	}
+	if got == "" {
+		t.Fatalf("detected prompt should not be empty")
+	}
+}
+
+func TestExtractPermissionPrompt_SplitChunksDetectedInWindow(t *testing.T) {
+	part1 := "Tool wants to run command. Allow this"
+	part2 := " action? (y/N)"
+	got, ok := extractPermissionPrompt(part1 + part2)
+	if !ok || got == "" {
+		t.Fatalf("expected split prompt to be detected, got ok=%v prompt=%q", ok, got)
 	}
 }
 
