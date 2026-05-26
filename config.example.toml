@@ -1097,6 +1097,8 @@ app_secret = "your-feishu-app-secret"
 #                           # 设为 true 时，cc-connect 会在支持 thread 的 Discord 频道内按 thread 隔离会话
 # progress_style = "legacy"  # Progress rendering: legacy | compact | card / 进度展示方式：legacy | compact | card
 #                            # card = one editable Discord embed progress card / card = 单条可编辑的 Discord 嵌入式进度卡
+# reply_hud = false  # If true, append final-reply HUD line (model/context/tokens) in Discord only
+#                    # 设为 true 时，仅在 Discord 最终回复末尾附加 HUD（模型/上下文/tokens）
 # respond_to_at_everyone_and_here = false  # If true, treat @everyone/@here as a direct mention so the bot responds
 #                              # 设为 true 时，将 @everyone/@here 视为直接 @ 机器人，使机器人响应
 # proxy = "http://127.0.0.1:7890"  # Optional HTTP/SOCKS5 proxy for Discord API & Gateway / 可选代理
@@ -1775,3 +1777,37 @@ app_secret = "your-feishu-app-secret"
 #
 # [projects.platforms.options]
 # token = "your-discord-bot-token"
+
+# =============================================================================
+# Project 9: Using Antigravity CLI / 项目 9：使用 Antigravity CLI (uncomment to enable / 取消注释以启用)
+# =============================================================================
+# Requires: agy installed locally (refer to https://antigravity.google/docs/cli-overview)
+# 需要安装：本地已安装 agy 命令 (参考 https://antigravity.google/docs/cli-overview)
+# Antigravity CLI uses `agy -p` under the hood.
+# Antigravity CLI 底层使用 `agy -p` 命令。
+#
+# [[projects]]
+# name = "my-antigravity-project"
+#
+# [projects.agent]
+# type = "antigravity"
+#
+# [projects.agent.options]
+# work_dir = "/path/to/project"
+# mode = "default"  # "default" | "yolo" | "plan"
+# cmd = "agy"      # CLI binary name (default: "agy") / CLI 二进制名称（默认 "agy"）
+# timeout_mins = 30  # Timeout per conversation turn (minutes) / 每次对话超时时间（分钟）
+#
+# Mode options / 模式说明:
+# - "default":   Prompt for approval on each tool use / 每次工具调用都需要确认
+# - "yolo":      Auto-approve all tool calls (--dangerously-skip-permissions) / 自动批准所有工具调用
+# - "plan":      Read-only plan mode with terminal sandbox constraints (--sandbox) / 只读沙箱规划模式
+#
+# Optional: specify a model / 可选：指定模型
+# model = "gemini-3.1-pro-preview"
+#
+# # Provider with API key / 使用 API Key 的 Provider
+# [[projects.agent.providers]]
+# name = "google"
+# api_key = "your-gemini-api-key"    # GEMINI_API_KEY
+
