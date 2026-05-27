@@ -57,12 +57,7 @@ func New(opts map[string]any) (core.Agent, error) {
 	codexHome, _ := opts["codex_home"].(string)
 	mode = normalizeMode(mode)
 	backend = normalizeBackend(backend)
-
-	if appServerURL == "" {
-		appServerURL = "ws://127.0.0.1:3845"
-	} else if strings.EqualFold(strings.TrimSpace(appServerURL), "stdio") {
-		appServerURL = ""
-	}
+	appServerURL = normalizeAppServerURL(appServerURL)
 
 	// cli_path allows overriding the binary, e.g. "omx" or "omx --flag val"
 	cliBin := "codex"
@@ -118,6 +113,17 @@ func normalizeBackend(raw string) string {
 	default:
 		return "exec"
 	}
+}
+
+func normalizeAppServerURL(raw string) string {
+	url := strings.TrimSpace(raw)
+	if url == "" {
+		return "ws://127.0.0.1:3845"
+	}
+	if strings.EqualFold(url, "stdio") {
+		return "stdio://"
+	}
+	return url
 }
 
 func normalizeMode(raw string) string {
