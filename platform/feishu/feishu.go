@@ -213,6 +213,11 @@ func newPlatform(name, domain string, opts map[string]any) (core.Platform, error
 	allowChat, _ := opts["allow_chat"].(string)
 	groupOnly, _ := opts["group_only"].(bool)
 	groupReplyAll, _ := opts["group_reply_all"].(bool)
+	// require_mention = false is equivalent to group_reply_all = true:
+	// both mean "respond to all group messages without needing an @mention".
+	if v, ok := opts["require_mention"].(bool); ok && !v {
+		groupReplyAll = true
+	}
 	respondToAtEveryoneAndHere, _ := opts["respond_to_at_everyone_and_here"].(bool)
 	shareSessionInChannel, _ := opts["share_session_in_channel"].(bool)
 	threadIsolation, _ := opts["thread_isolation"].(bool)

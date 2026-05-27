@@ -279,7 +279,9 @@ func (p *Platform) onMessage(data *chatbot.BotCallbackDataModel, richText *richT
 	}
 
 	// Handle image messages
-	if data.Msgtype == "image" {
+	// DingTalk delivers image messages as either "image" or "picture" depending
+	// on the client and robot type. Both carry the same downloadCode field.
+	if data.Msgtype == "image" || data.Msgtype == "picture" {
 		p.handleImageMessage(data, sessionKey)
 		return
 	}

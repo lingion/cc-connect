@@ -1118,3 +1118,53 @@ func TestOnMessageThreadIsolationAdmitsAttachmentWithoutMention(t *testing.T) {
 		// expected
 	}
 }
+
+func extractBasePlatform(p core.Platform) *Platform {
+	if fp, ok := p.(*Platform); ok {
+		return fp
+	}
+	if ip, ok := p.(*interactivePlatform); ok {
+		return ip.Platform
+	}
+	return nil
+}
+
+func TestNewPlatform_RequireMentionFalseAliasesGroupReplyAll(t *testing.T) {
+	// Regression test for #1141: users set require_mention = false but feishu
+	// reads group_reply_all. The two options must be equivalent so that
+	// group messages without @mention are NOT silently dropped.
+	p, err := newPlatform("feishu", lark.FeishuBaseUrl, map[string]any{
+		"app_id":          "cli_test",
+		"app_secret":      "secret",
+		"require_mention": false,
+	})
+	if err != nil {
+		t.Fatalf("newPlatform error: %v", err)
+	}
+	fp := extractBasePlatform(p)
+	if fp == nil {
+		t.Fatal("expected *Platform or *interactivePlatform")
+	}
+	if !fp.groupReplyAll {
+		t.Error("require_mention=false should set groupReplyAll=true, but it is false")
+	}
+}
+
+func TestNewPlatform_RequireMentionTrueDoesNotForceGroupReplyAll(t *testing.T) {
+	// require_mention = true (the default) must NOT set groupReplyAll.
+	p, err := newPlatform("feishu", lark.FeishuBaseUrl, map[string]any{
+		"app_id":          "cli_test",
+		"app_secret":      "secret",
+		"require_mention": true,
+	})
+	if err != nil {
+		t.Fatalf("newPlatform error: %v", err)
+	}
+	fp := extractBasePlatform(p)
+	if fp == nil {
+		t.Fatal("expected *Platform or *interactivePlatform")
+	}
+	if fp.groupReplyAll {
+		t.Error("require_mention=true should leave groupReplyAll=false, but it is true")
+	}
+}

@@ -690,6 +690,46 @@ func (f *fakeAccessTokenRT) RoundTrip(req *http.Request) (*http.Response, error)
 	}, nil
 }
 
+func TestOnRawMessage_PictureMsgTypeNotDroppedAsEmptyText(t *testing.T) {
+	// Regression test for #1128: DingTalk sometimes sends msgtype="picture"
+	// for image messages. Before the fix, this fell through to the text handler,
+	// which produced an empty-content message that was silently dropped by the engine.
+	// After the fix, the message is routed to handleImageMessage instead.
+	//
+	// We cannot easily mock the full HTTP download path here. The test verifies the
+	// negative: for msgtype="picture" the handler must NOT be called with empty content.
+	// handleImageMessage may panic on the nil httpClient; we recover from that.
+	var handlerCalledWithEmptyContent bool
+
+	func() {
+		defer func() { recover() }() // handleImageMessage panics on nil httpClient — that's OK
+		p := &Platform{
+			handler: func(_ core.Platform, msg *core.Message) {
+				if msg.Content == "" && len(msg.Images) == 0 {
+					handlerCalledWithEmptyContent = true
+				}
+			},
+		}
+		p.onRawMessage(`{
+			"msgtype": "picture",
+			"msgId": "msg-pic-1",
+			"conversationType": "1",
+			"conversationId": "conv-1",
+			"conversationTitle": "test",
+			"senderStaffId": "user-1",
+			"senderNick": "Alice",
+			"sessionWebhook": "https://example.invalid/webhook",
+			"content": {"downloadCode": "some-code"}
+		}`)
+	}()
+
+	// The message is routed to handleImageMessage (which fails at download — no mock),
+	// not to the text handler. The handler must NOT be invoked with empty content.
+	if handlerCalledWithEmptyContent {
+		t.Error("msgtype=picture: handler called with empty content (image was silently dropped as text)")
+	}
+}
+
 func TestGetAccessToken_ZeroExpireIn_FallsBackToDefault(t *testing.T) {
 	p := &Platform{
 		clientID:     "test_client",
