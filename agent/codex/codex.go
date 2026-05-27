@@ -39,6 +39,7 @@ type Agent struct {
 	cliExtraArgs    []string // extra args parsed from cli_path after the binary
 	providers       []core.ProviderConfig
 	activeIdx       int // -1 = no provider set
+	configEnv       []string // env vars from [projects.agent.options.env] — persists across SetSessionEnv calls
 	sessionEnv      []string
 	mu              sync.RWMutex
 }
@@ -78,6 +79,23 @@ func New(opts map[string]any) (core.Agent, error) {
 		return nil, fmt.Errorf("codex: %q CLI not found in PATH, install with: npm install -g @openai/codex", cliBin)
 	}
 
+	// Parse project-level env from opts["env"] (set via [projects.agent.options.env] in config.toml).
+	// Stored separately from runtime sessionEnv so SetSessionEnv calls cannot overwrite it.
+	// MergeEnv semantics ensure these override any same-named keys inherited from os.Environ()
+	// when the codex subprocess is spawned (e.g. user-scoped HTTPS_PROXY leaking into the agent).
+	var configEnv []string
+	if envMap, ok := opts["env"].(map[string]string); ok {
+		for k, v := range envMap {
+			configEnv = append(configEnv, k+"="+v)
+		}
+	} else if envMap, ok := opts["env"].(map[string]any); ok {
+		for k, v := range envMap {
+			if s, ok := v.(string); ok {
+				configEnv = append(configEnv, k+"="+s)
+			}
+		}
+	}
+
 	return &Agent{
 		workDir:         workDir,
 		model:           model,
@@ -88,6 +106,7 @@ func New(opts map[string]any) (core.Agent, error) {
 		codexHome:       strings.TrimSpace(codexHome),
 		cliBin:          cliBin,
 		cliExtraArgs:    cliExtraArgs,
+		configEnv:       configEnv,
 		activeIdx:       -1,
 	}, nil
 }
@@ -340,7 +359,12 @@ func (a *Agent) StartSession(ctx context.Context, sessionID string) (core.AgentS
 	cliBin := a.cliBin
 	cliExtraArgs := a.cliExtraArgs
 	workDir := a.workDir
-	extraEnv := a.providerEnvLocked()
+	// Order matters for MergeEnv override semantics (later wins):
+	//   1. configEnv — static env from [projects.agent.options.env]
+	//   2. providerEnv — per-provider keys (OPENAI_API_KEY etc.)
+	//   3. sessionEnv — runtime overrides from /env or admin actions
+	extraEnv := append([]string(nil), a.configEnv...)
+	extraEnv = append(extraEnv, a.providerEnvLocked()...)
 	extraEnv = append(extraEnv, a.sessionEnv...)
 	var baseURL string
 	if a.activeIdx >= 0 && a.activeIdx < len(a.providers) {
