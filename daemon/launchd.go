@@ -305,8 +305,8 @@ func xmlEscape(s string) string {
 	return b.String()
 }
 
-// CheckLinger is a Linux/systemd concept; on macOS launchd there is no
-// equivalent. Always return enabled so the warning in daemon.go is skipped.
+// CheckLinger returns true on macOS because launchd user agents are not
+// subject to systemd-style linger; they persist independently of login sessions.
 func CheckLinger() (enabled bool, user string) {
 	return true, ""
 }
