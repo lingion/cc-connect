@@ -112,6 +112,7 @@ type replyContext struct {
 }
 
 type Platform struct {
+	mu                         sync.RWMutex
 	platformName               string
 	domain                     string
 	appID                      string
@@ -312,12 +313,38 @@ func (p *Platform) dispatchPlatform() core.Platform {
 	return p
 }
 
+func (p *Platform) getHandler() core.MessageHandler {
+	p.mu.RLock()
+	defer p.mu.RUnlock()
+	return p.handler
+}
+
+func (p *Platform) getCancel() context.CancelFunc {
+	p.mu.RLock()
+	defer p.mu.RUnlock()
+	return p.cancel
+}
+
+func (p *Platform) getServer() *http.Server {
+	p.mu.RLock()
+	defer p.mu.RUnlock()
+	return p.server
+}
+
+func (p *Platform) getBotOpenID() string {
+	p.mu.RLock()
+	defer p.mu.RUnlock()
+	return p.botOpenID
+}
+
 func (p *Platform) KeepPreviewOnFinish() bool {
 	return p.useInteractiveCard
 }
 
 func (p *Platform) Start(handler core.MessageHandler) error {
+	p.mu.Lock()
 	p.handler = handler
+	p.mu.Unlock()
 
 	// In webhook mode (private/self-hosted Feishu/Lark), startup must not depend
 	// on a successful bot-info API call. Older private deployments may not support
@@ -328,7 +355,9 @@ func (p *Platform) Start(handler core.MessageHandler) error {
 		if openID, err := p.fetchBotOpenID(); err != nil {
 			slog.Warn(p.platformName+": failed to get bot open_id, group chat filtering disabled", "error", err)
 		} else {
+			p.mu.Lock()
 			p.botOpenID = openID
+			p.mu.Unlock()
 			slog.Info(p.platformName+": bot identified", "open_id", openID)
 		}
 	}
@@ -433,7 +462,9 @@ func (p *Platform) startWebSocketMode() error {
 	p.wsClient = larkws.NewClient(p.appID, p.appSecret, wsOpts...)
 
 	ctx, cancel := context.WithCancel(context.Background())
+	p.mu.Lock()
 	p.cancel = cancel
+	p.mu.Unlock()
 
 	go func() {
 		if err := p.wsClient.Start(ctx); err != nil {
@@ -449,6 +480,7 @@ func (p *Platform) startWebhookMode() error {
 	mux := http.NewServeMux()
 	mux.HandleFunc(p.callbackPath, p.webhookHandler)
 
+	p.mu.Lock()
 	p.server = &http.Server{
 		Addr:    ":" + p.port,
 		Handler: mux,
@@ -456,6 +488,7 @@ func (p *Platform) startWebhookMode() error {
 
 	_, cancel := context.WithCancel(context.Background())
 	p.cancel = cancel
+	p.mu.Unlock()
 
 	go func() {
 		slog.Info(p.tag()+": webhook server listening", "port", p.port, "path", p.callbackPath)
@@ -626,7 +659,8 @@ func (p *Platform) onCardAction(event *callback.CardActionTriggerEvent) (*callba
 		}
 
 		rctx := replyContext{messageID: messageID, chatID: chatID, sessionKey: sessionKey}
-		go p.handler(p.dispatchPlatform(), &core.Message{
+		h := p.getHandler()
+		go h(p.dispatchPlatform(), &core.Message{
 			SessionKey: sessionKey,
 			Platform:   p.platformName,
 			UserID:     userID,
@@ -657,7 +691,8 @@ func (p *Platform) onCardAction(event *callback.CardActionTriggerEvent) (*callba
 	// askq: — AskUserQuestion option selected, forward as user message
 	if strings.HasPrefix(actionVal, "askq:") {
 		rctx := replyContext{messageID: messageID, chatID: chatID, sessionKey: sessionKey}
-		go p.handler(p.dispatchPlatform(), &core.Message{
+		h := p.getHandler()
+		go h(p.dispatchPlatform(), &core.Message{
 			SessionKey: sessionKey,
 			Platform:   p.platformName,
 			UserID:     userID,
@@ -692,7 +727,8 @@ func (p *Platform) onCardAction(event *callback.CardActionTriggerEvent) (*callba
 
 		slog.Info(p.tag()+": card action dispatched as command", "cmd", cmdText, "user", userID)
 
-		go p.handler(p.dispatchPlatform(), &core.Message{
+		h := p.getHandler()
+		go h(p.dispatchPlatform(), &core.Message{
 			SessionKey: sessionKey,
 			Platform:   p.platformName,
 			UserID:     userID,
@@ -902,14 +938,15 @@ func isMessageWithdrawnError(err error) bool {
 }
 
 func (p *Platform) dispatchCoreMessage(msg *core.Message) {
-	if msg == nil || p.handler == nil {
+	h := p.getHandler()
+	if msg == nil || h == nil {
 		return
 	}
 	if p.isMessageRecalled(msg.MessageID) {
 		slog.Debug(p.tag()+": recalled message dispatch dropped", "message_id", msg.MessageID)
 		return
 	}
-	p.handler(p.dispatchPlatform(), msg)
+	h(p.dispatchPlatform(), msg)
 }
 
 func (p *Platform) onMessageRecalled(_ context.Context, event *larkim.P2MessageRecalledV1) error {
@@ -935,10 +972,11 @@ func (p *Platform) onMessageRecalled(_ context.Context, event *larkim.P2MessageR
 		"recall_type", stringValue(event.Event.RecallType),
 	)
 
-	if p.handler == nil {
+	h := p.getHandler()
+	if h == nil {
 		return nil
 	}
-	p.handler(p.dispatchPlatform(), &core.Message{
+	h(p.dispatchPlatform(), &core.Message{
 		Platform:  p.platformName,
 		MessageID: messageID,
 		Recalled:  true,
@@ -1010,8 +1048,8 @@ func (p *Platform) onMessage(ctx context.Context, event *larkim.P2MessageReceive
 	// thread set; sessionKey is also used downstream for dispatch.
 	sessionKey := p.makeSessionKey(msg, chatID, userID)
 
-	if chatType == "group" && !p.groupReplyAll && p.botOpenID != "" {
-		if !isBotMentioned(msg.Mentions, p.botOpenID) {
+	if chatType == "group" && !p.groupReplyAll && p.getBotOpenID() != "" {
+		if !isBotMentioned(msg.Mentions, p.getBotOpenID()) {
 			switch {
 			// Feishu @all sends {"text":"@_all"} with 0 mentions.
 			case p.respondToAtEveryoneAndHere && msg.Content != nil && strings.Contains(*msg.Content, "@_all"):
@@ -1113,7 +1151,7 @@ func (p *Platform) dispatchMessage(ctx context.Context, msgType, content string,
 			slog.Error(p.tag()+": failed to parse text content", "error", err)
 			return
 		}
-		text := stripMentions(textBody.Text, mentions, p.botOpenID)
+		text := stripMentions(textBody.Text, mentions, p.getBotOpenID())
 		if text == "" && quoted.text == "" && len(quoted.images) == 0 {
 			slog.Debug(p.tag()+": dropping empty text after mention stripping",
 				"message_id", messageID,
@@ -1186,7 +1224,7 @@ func (p *Platform) dispatchMessage(ctx context.Context, msgType, content string,
 
 	case "post":
 		textParts, images := p.parsePostContent(messageID, content)
-		text := stripMentions(strings.Join(textParts, "\n"), mentions, p.botOpenID)
+		text := stripMentions(strings.Join(textParts, "\n"), mentions, p.getBotOpenID())
 		if text == "" && len(images) == 0 && quoted.text == "" && len(quoted.images) == 0 {
 			return
 		}
@@ -3699,17 +3737,17 @@ func (p *Platform) Stop() error {
 			slog.Warn(p.tag()+": primary shutting down, secondary platforms will lose event source",
 				"remaining", remaining)
 		}
-		if p.cancel != nil {
-			p.cancel()
+		if cancel := p.getCancel(); cancel != nil {
+			cancel()
 		}
 	} else {
 		unregisterSharedWS(p)
 	}
 	// Stop webhook server if running (Lark international version)
-	if p.server != nil {
+	if svr := p.getServer(); svr != nil {
 		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 		defer cancel()
-		if err := p.server.Shutdown(ctx); err != nil {
+		if err := svr.Shutdown(ctx); err != nil {
 			slog.Error(p.tag()+": webhook server shutdown error", "error", err)
 		}
 	}
@@ -3864,7 +3902,7 @@ func (p *Platform) extractPostParts(messageID string, post *postLang) ([]string,
 					textParts = append(textParts, elem.Text)
 				}
 			case "at":
-				if p.botOpenID != "" && elem.UserId == p.botOpenID {
+				if p.getBotOpenID() != "" && elem.UserId == p.getBotOpenID() {
 					continue
 				}
 				switch {
@@ -3928,7 +3966,7 @@ func (p *Platform) onBotMenu(event *larkapplication.P2BotMenuV6) error {
 	userName := p.resolveUserName(userID)
 	sessionKey := p.platformName + ":" + userID + ":" + userID
 
-	p.handler(p.dispatchPlatform(), &core.Message{
+	p.getHandler()(p.dispatchPlatform(), &core.Message{
 		SessionKey: sessionKey,
 		Platform:   p.platformName,
 		Content:    content,

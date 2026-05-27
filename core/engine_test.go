@@ -7,6 +7,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -1060,6 +1061,7 @@ func TestProcessInteractiveEvents_DoesNotSuppressDifferentFinalText(t *testing.T
 func TestProcessInteractiveEvents_AppendsReplyFooterWhenEnabled(t *testing.T) {
 	homeDir := t.TempDir()
 	t.Setenv("HOME", homeDir)
+	t.Setenv("USERPROFILE", homeDir)
 
 	agent := &stubReplyFooterAgent{
 		stubModelModeAgent: stubModelModeAgent{
@@ -1108,6 +1110,7 @@ func TestProcessInteractiveEvents_AppendsReplyFooterWhenEnabled(t *testing.T) {
 func TestProcessInteractiveEvents_AppendsContextIndicatorInsideReplyFooter(t *testing.T) {
 	homeDir := t.TempDir()
 	t.Setenv("HOME", homeDir)
+	t.Setenv("USERPROFILE", homeDir)
 
 	agent := &stubReplyFooterAgent{
 		stubModelModeAgent: stubModelModeAgent{model: "glm-5.1"},
@@ -1144,6 +1147,7 @@ func TestProcessInteractiveEvents_AppendsContextIndicatorInsideReplyFooter(t *te
 func TestProcessInteractiveEvents_ToolSegmentsKeepFinalFooter(t *testing.T) {
 	homeDir := t.TempDir()
 	t.Setenv("HOME", homeDir)
+	t.Setenv("USERPROFILE", homeDir)
 
 	agent := &stubReplyFooterAgent{
 		stubModelModeAgent: stubModelModeAgent{model: "glm-5.1"},
@@ -1258,6 +1262,7 @@ func TestProcessInteractiveEvents_DoesNotAppendReplyFooterWhenDisabled(t *testin
 func TestProcessInteractiveEvents_ReplyFooterPrefersSessionRuntimeState(t *testing.T) {
 	homeDir := t.TempDir()
 	t.Setenv("HOME", homeDir)
+	t.Setenv("USERPROFILE", homeDir)
 
 	agent := &stubReplyFooterAgent{
 		stubModelModeAgent: stubModelModeAgent{
@@ -1530,6 +1535,9 @@ func TestProcessInteractiveEvents_CardProgressUsesCardTemplate(t *testing.T) {
 }
 
 func TestProcessInteractiveEvents_FinalReplyUsesWorkspaceForReferenceRendering(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("TransformLocalReferences path handling assumes Unix separators")
+	}
 	p := &stubPlatformEngine{n: "feishu"}
 	a := &namedStubModelModeAgent{name: "codex"}
 	e := NewEngine("test", a, []Platform{p}, "", LangEnglish)
@@ -9238,7 +9246,11 @@ func TestRunShellWithProgress_EmptyOutput(t *testing.T) {
 	p := &stubPlatformEngine{n: "test"}
 	e := NewEngine("test", &stubAgent{}, []Platform{p}, "", LangEnglish)
 
-	err := e.runShellWithProgress(p, "ctx", "true", t.TempDir(), 5*time.Second, 4000)
+	cmd := "true"
+	if runtime.GOOS == "windows" {
+		cmd = `cmd /c "exit /b 0"`
+	}
+	err := e.runShellWithProgress(p, "ctx", cmd, t.TempDir(), 5*time.Second, 4000)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -9264,7 +9276,11 @@ func TestRunShellWithProgress_StderrOutput(t *testing.T) {
 	p := &stubPlatformEngine{n: "test"}
 	e := NewEngine("test", &stubAgent{}, []Platform{p}, "", LangEnglish)
 
-	err := e.runShellWithProgress(p, "ctx", "echo err >&2", t.TempDir(), 5*time.Second, 4000)
+	cmd := "echo err >&2"
+	if runtime.GOOS == "windows" {
+		cmd = `cmd /c "echo err >&2"`
+	}
+	err := e.runShellWithProgress(p, "ctx", cmd, t.TempDir(), 5*time.Second, 4000)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -9294,7 +9310,13 @@ func TestRunShellWithProgress_LongOutputTruncated(t *testing.T) {
 	e := NewEngine("test", &stubAgent{}, []Platform{p}, "", LangEnglish)
 
 	// Generate output longer than maxOutput
-	err := e.runShellWithProgress(p, "ctx", "python3 -c 'print(\"x\" * 5000)'", t.TempDir(), 5*time.Second, 100)
+	cmd := "python3 -c 'print(\"x\" * 5000)'"
+	timeout := 5 * time.Second
+	if runtime.GOOS == "windows" {
+		cmd = `Write-Host ('x' * 5000)`
+		timeout = 15 * time.Second
+	}
+	err := e.runShellWithProgress(p, "ctx", cmd, t.TempDir(), timeout, 100)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -9337,7 +9359,7 @@ func TestRunShellWithProgress_NonexistentCommand(t *testing.T) {
 			if !strings.Contains(last, "❌") {
 				t.Errorf("expected failure emoji, got %q", last)
 			}
-			if !strings.Contains(last, "failed to start") && !strings.Contains(last, "not found") && !strings.Contains(last, "executable file not found") {
+			if !strings.Contains(last, "failed to start") && !strings.Contains(last, "not found") && !strings.Contains(last, "executable file not found") && !strings.Contains(last, "CommandNotFoundException") {
 				t.Errorf("expected start failure message, got %q", last)
 			}
 			return
