@@ -13079,3 +13079,62 @@ func TestHandlePendingPermission_AskQuestion_EmptyContentRejected(t *testing.T) 
 		t.Fatalf("RespondPermission calls = %d, want 1", session.calls)
 	}
 }
+
+func TestMaybeAutoResetSessionOnIdle_UsesLastUserActivity(t *testing.T) {
+	// Regression test for #1115 Bug 2: maybeAutoResetSessionOnIdle must use
+	// LastUserActivity (only updated on real user messages) rather than
+	// UpdatedAt (bumped by every session.Unlock including heartbeats).
+	// Without the fix, automated activity (heartbeats, unsolicited agent output)
+	// would continuously bump UpdatedAt and prevent idle reset from ever firing.
+	e := newTestEngine()
+	e.SetResetOnIdle(30 * time.Minute)
+
+	sm := NewSessionManager(t.TempDir())
+	session := sm.GetOrCreateActive("user:sk")
+	// Simulate history so the session is eligible for reset.
+	session.AddHistory("user", "hello")
+	session.SetAgentSessionID("agent-id-1", "claudecode")
+	session.TryLock()
+
+	// Simulate that UpdatedAt is recent (heartbeat just updated it)
+	// but LastUserActivity is old (last real user message was 35 minutes ago).
+	old := time.Now().Add(-35 * time.Minute)
+	session.mu.Lock()
+	session.UpdatedAt = time.Now() // heartbeat bumped this just now
+	session.LastUserActivity = old // last real user message was 35 min ago
+	session.mu.Unlock()
+
+	p := &stubPlatformEngine{n: "test"}
+	msg := &Message{SessionKey: "sk", ReplyCtx: "ctx"}
+
+	rotated := e.maybeAutoResetSessionOnIdle(p, msg, sm, "ws:sk", session)
+	if rotated == nil {
+		t.Fatal("expected idle reset to fire because LastUserActivity is 35min ago, but it did not")
+	}
+}
+
+func TestMaybeAutoResetSessionOnIdle_NotFiredWhenUserActivityRecent(t *testing.T) {
+	// Complementary test: when LastUserActivity is recent, the reset must NOT fire
+	// even if UpdatedAt is also recent (normal case).
+	e := newTestEngine()
+	e.SetResetOnIdle(30 * time.Minute)
+
+	sm := NewSessionManager(t.TempDir())
+	session := sm.GetOrCreateActive("user:sk2")
+	session.AddHistory("user", "hello")
+	session.SetAgentSessionID("agent-id-2", "claudecode")
+	session.TryLock()
+
+	// LastUserActivity is only 5 minutes ago — should not idle-reset.
+	session.mu.Lock()
+	session.LastUserActivity = time.Now().Add(-5 * time.Minute)
+	session.mu.Unlock()
+
+	p := &stubPlatformEngine{n: "test"}
+	msg := &Message{SessionKey: "sk2", ReplyCtx: "ctx"}
+
+	rotated := e.maybeAutoResetSessionOnIdle(p, msg, sm, "ws:sk2", session)
+	if rotated != nil {
+		t.Fatal("expected no idle reset because LastUserActivity is only 5min ago")
+	}
+}
