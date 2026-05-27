@@ -158,6 +158,13 @@ type Platform struct {
 	// session key, enabling async card refreshes via the Patch API.
 	cardActionMsgMu  sync.Mutex
 	cardActionMsgIDs map[string]string // sessionKey → messageID
+	// activeThreadSessions tracks thread sessionKeys that have already been
+	// accepted by the bot. In group chats with thread_isolation, once a thread
+	// has been engaged (the first @bot message), subsequent attachment-only
+	// messages (image/file/audio) inside the same thread are passed through
+	// without requiring another @bot mention. Value is the last-seen time so
+	// stale entries can be expired by a future TTL sweep if needed.
+	activeThreadSessions sync.Map // sessionKey -> time.Time
 }
 
 type interactivePlatform struct {
@@ -999,12 +1006,25 @@ func (p *Platform) onMessage(ctx context.Context, event *larkim.P2MessageReceive
 		"thread_isolation", p.threadIsolation,
 	)
 
+	// Pre-compute sessionKey so the @bot filter below can consult the active
+	// thread set; sessionKey is also used downstream for dispatch.
+	sessionKey := p.makeSessionKey(msg, chatID, userID)
+
 	if chatType == "group" && !p.groupReplyAll && p.botOpenID != "" {
 		if !isBotMentioned(msg.Mentions, p.botOpenID) {
+			switch {
 			// Feishu @all sends {"text":"@_all"} with 0 mentions.
-			if p.respondToAtEveryoneAndHere && msg.Content != nil && strings.Contains(*msg.Content, "@_all") {
+			case p.respondToAtEveryoneAndHere && msg.Content != nil && strings.Contains(*msg.Content, "@_all"):
 				slog.Debug(p.tag()+": responding to @all message", "chat_id", chatID)
-			} else {
+			// Once a thread has been engaged via @bot, allow follow-up
+			// attachment-only messages (image/file/audio) in the same thread
+			// through without re-mentioning the bot. Plain text and rich-text
+			// posts still require an explicit @bot to avoid pulling in
+			// unrelated chatter.
+			case p.threadIsolation && isAttachmentMsgType(msgType) && p.isActiveThreadSession(sessionKey):
+				slog.Debug(p.tag()+": passing attachment through active thread without mention",
+					"chat_id", chatID, "session_key", sessionKey, "msg_type", msgType, "message_id", messageID)
+			default:
 				slog.Debug(p.tag()+": ignoring group message without bot mention", "chat_id", chatID)
 				return nil
 			}
@@ -1038,13 +1058,16 @@ func (p *Platform) onMessage(ctx context.Context, event *larkim.P2MessageReceive
 	mentions := msg.Mentions
 	parentID := stringValue(msg.ParentId)
 
-	sessionKey := p.makeSessionKey(msg, chatID, userID)
 	rctx := replyContext{messageID: messageID, chatID: chatID, sessionKey: sessionKey}
 	slog.Debug(p.tag()+": routed inbound message",
 		"message_id", messageID,
 		"session_key", sessionKey,
 		"reply_in_thread", p.shouldReplyInThread(rctx),
 	)
+
+	// Mark this thread as bot-engaged so subsequent attachment-only messages
+	// in the same thread can pass through without re-mentioning the bot.
+	p.markThreadSessionActive(sessionKey)
 
 	// Dispatch message handling asynchronously so the SDK event loop is not
 	// blocked by IO-heavy operations (image/audio download, handler HTTP calls).
@@ -2770,6 +2793,38 @@ func isBotMentioned(mentions []*larkim.MentionEvent, botOpenID string) bool {
 		}
 	}
 	return false
+}
+
+// isAttachmentMsgType reports whether a Feishu message type carries only an
+// attachment payload (no free-form text the user could use to address another
+// human). These are the message types we are willing to admit into an
+// already-engaged thread without an explicit @bot mention.
+func isAttachmentMsgType(msgType string) bool {
+	switch msgType {
+	case "image", "file", "audio", "media":
+		return true
+	}
+	return false
+}
+
+// markThreadSessionActive records that a thread sessionKey has been engaged
+// by an @bot message, enabling attachment-only follow-ups inside the thread.
+// No-op when thread isolation is disabled or sessionKey is not a thread key.
+func (p *Platform) markThreadSessionActive(sessionKey string) {
+	if !p.threadIsolation || !isThreadSessionKey(sessionKey) {
+		return
+	}
+	p.activeThreadSessions.Store(sessionKey, time.Now())
+}
+
+// isActiveThreadSession reports whether the given sessionKey corresponds to a
+// thread that has previously been engaged by an @bot message.
+func (p *Platform) isActiveThreadSession(sessionKey string) bool {
+	if !p.threadIsolation || !isThreadSessionKey(sessionKey) {
+		return false
+	}
+	_, ok := p.activeThreadSessions.Load(sessionKey)
+	return ok
 }
 
 // stripMentions processes @mention placeholders (e.g. @_user_1) in text.
