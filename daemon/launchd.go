@@ -305,8 +305,3 @@ func xmlEscape(s string) string {
 	return b.String()
 }
 
-// CheckLinger returns true on macOS because launchd user agents are not
-// subject to systemd-style linger; they persist independently of login sessions.
-func CheckLinger() (enabled bool, user string) {
-	return true, ""
-}
