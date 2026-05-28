@@ -225,7 +225,7 @@ func (as *antigravitySession) readLoop(ctx context.Context, cmd *exec.Cmd, stdou
 	defer as.wg.Done()
 	defer func() {
 		for _, f := range tempFiles {
-			os.Remove(f)
+			_ = os.Remove(f)
 		}
 
 		// Detect conversation ID if this was the first turn of a fresh session
@@ -271,7 +271,7 @@ func (as *antigravitySession) readLoop(ctx context.Context, cmd *exec.Cmd, stdou
 
 	go func() {
 		<-ctx.Done()
-		stdout.Close()
+		_ = stdout.Close()
 	}()
 
 	reader := bufio.NewReader(stdout)

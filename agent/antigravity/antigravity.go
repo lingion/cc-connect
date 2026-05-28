@@ -166,7 +166,9 @@ func (a *Agent) fetchModelsFromAPI(ctx context.Context) []core.ModelOption {
 		slog.Debug("antigravity: failed to fetch models", "error", err)
 		return nil
 	}
-	defer resp.Body.Close()
+	defer func() {
+		_ = resp.Body.Close()
+	}()
 	if resp.StatusCode != http.StatusOK {
 		return nil
 	}
@@ -249,15 +251,15 @@ func (a *Agent) DeleteSession(_ context.Context, sessionID string) error {
 				SessionID string `json:"sessionId"`
 			}
 			if json.Unmarshal([]byte(scanner.Text()), &sf) == nil && sf.SessionID == sessionID {
-				file.Close()
+				_ = file.Close()
 				return os.Remove(fpath)
 			}
 		}
 		if err := scanner.Err(); err != nil {
-			file.Close()
+			_ = file.Close()
 			continue
 		}
-		file.Close()
+		_ = file.Close()
 	}
 	return fmt.Errorf("session file not found: %s", sessionID)
 }

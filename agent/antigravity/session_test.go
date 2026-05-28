@@ -61,7 +61,7 @@ func TestSession_ContinueSessionTreatedAsFresh(t *testing.T) {
 	if err != nil {
 		t.Fatalf("newAntigravitySession: %v", err)
 	}
-	defer s.Close()
+	defer func() { _ = s.Close() }()
 
 	if got := s.CurrentSessionID(); got != "" {
 		t.Errorf("ContinueSession should be treated as fresh: chatID = %q, want empty", got)
@@ -101,14 +101,14 @@ func TestRespondPermission_WritesTerminalAnswer(t *testing.T) {
 	if err != nil {
 		t.Fatalf("newAntigravitySession: %v", err)
 	}
-	defer s.Close()
+	defer func() { _ = s.Close() }()
 
 	r, w, err := os.Pipe()
 	if err != nil {
 		t.Fatalf("os.Pipe: %v", err)
 	}
-	defer r.Close()
-	defer w.Close()
+	defer func() { _ = r.Close() }()
+	defer func() { _ = w.Close() }()
 	s.stdin = w
 
 	s.permReqID.Store("req")
