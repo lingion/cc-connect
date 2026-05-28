@@ -107,6 +107,14 @@ jobs:
         env:
           GOPROXY: https://proxy.golang.org,direct
           GOSUMDB: sum.golang.org
+          GONOSUMDB: ""
+
+      - name: Verify module checksums
+        run: go mod verify
+        env:
+          GOPROXY: https://proxy.golang.org,direct
+          GOSUMDB: sum.golang.org
+          GONOSUMDB: ""
 
       - name: Build
         run: go build ./...
