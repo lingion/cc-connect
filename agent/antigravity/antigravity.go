@@ -529,10 +529,10 @@ func listAntigravitySessions(workDir string) ([]core.AgentSessionInfo, error) {
 			lineNum++
 		}
 		if err := scanner.Err(); err != nil {
-			file.Close()
+			_ = file.Close()
 			continue
 		}
-		file.Close()
+		_ = file.Close()
 
 		if sf.SessionID == "" || sf.Kind == "subagent" || !hasUserMsg {
 			continue

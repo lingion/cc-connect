@@ -384,7 +384,7 @@ func (as *antigravitySession) detectNewSessionID(preEntries map[string]bool, sen
 				})
 			}
 		}
-		file.Close()
+		_ = file.Close()
 	}
 	if len(candidates) == 0 {
 		return ""
