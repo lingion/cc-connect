@@ -18,6 +18,8 @@ func TestOnMessageRecalledDispatchesCoreRecallMessage(t *testing.T) {
 	got := make(chan *core.Message, 1)
 	p := &Platform{
 		platformName: "feishu",
+		allowFrom:    "*",
+		allowChat:    "*",
 		handler: func(_ core.Platform, msg *core.Message) {
 			got <- msg
 		},
@@ -1011,6 +1013,8 @@ func TestOnMessageThreadIsolationAdmitsAttachmentWithoutMention(t *testing.T) {
 		appID:           appID,
 		appSecret:       appSecret,
 		botOpenID:       botOpenID,
+		allowFrom:       "*",
+		allowChat:       "*",
 		threadIsolation: true,
 		dedup:           &core.MessageDedup{},
 		client: lark.NewClient(appID, appSecret,
