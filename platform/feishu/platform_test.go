@@ -571,6 +571,7 @@ func TestNewFeishu_InvalidCustomDomain(t *testing.T) {
 func TestLark_SessionKeyPrefix(t *testing.T) {
 	p, err := newPlatform("lark", lark.LarkBaseUrl, map[string]any{
 		"app_id": "cli_xxx", "app_secret": "secret", "enable_feishu_card": true,
+		"allow_from": "*", "allow_chat": "*",
 	})
 	if err != nil {
 		t.Fatalf("newPlatform(lark) error = %v", err)
@@ -626,6 +627,7 @@ func TestLark_SessionKeyPrefix(t *testing.T) {
 func TestLark_ThreadIsolationUsesRootSessionKey(t *testing.T) {
 	p, err := newPlatform("lark", lark.LarkBaseUrl, map[string]any{
 		"app_id": "cli_xxx", "app_secret": "secret", "enable_feishu_card": true, "thread_isolation": true,
+		"allow_from": "*", "allow_chat": "*",
 	})
 	if err != nil {
 		t.Fatalf("newPlatform(lark) error = %v", err)
@@ -688,6 +690,7 @@ func TestLark_GroupReplyAllWithThreadIsolationUsesRootSessionKeyWithoutMention(t
 	p, err := newPlatform("lark", lark.LarkBaseUrl, map[string]any{
 		"app_id": "cli_xxx", "app_secret": "secret", "enable_feishu_card": true,
 		"group_reply_all": true, "thread_isolation": true,
+		"allow_from": "*", "allow_chat": "*",
 	})
 	if err != nil {
 		t.Fatalf("newPlatform(lark) error = %v", err)
