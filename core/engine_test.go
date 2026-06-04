@@ -408,6 +408,28 @@ func (p *stubCompactProgressPlatform) getPreviewEdits() []string {
 	return out
 }
 
+type stubDoneReactionPlatform struct {
+	stubPlatformEngine
+	doneMu    sync.Mutex
+	doneCount int
+	doneCtxs  []any
+}
+
+func (p *stubDoneReactionPlatform) AddDoneReaction(replyCtx any) {
+	p.doneMu.Lock()
+	defer p.doneMu.Unlock()
+	p.doneCount++
+	p.doneCtxs = append(p.doneCtxs, replyCtx)
+}
+
+func (p *stubDoneReactionPlatform) doneSnapshot() (int, []any) {
+	p.doneMu.Lock()
+	defer p.doneMu.Unlock()
+	ctxs := make([]any, len(p.doneCtxs))
+	copy(ctxs, p.doneCtxs)
+	return p.doneCount, ctxs
+}
+
 type stubModelModeAgent struct {
 	stubAgent
 	model           string
@@ -1209,6 +1231,32 @@ func TestProcessInteractiveEvents_DropsStandaloneEllipsisProgress(t *testing.T) 
 	sent := p.getSent()
 	if len(sent) != 1 || sent[0] != "done" {
 		t.Fatalf("sent = %#v, want only final answer without standalone ellipsis progress", sent)
+	}
+}
+
+func TestProcessInteractiveEvents_AddsDoneReactionAfterNormalReply(t *testing.T) {
+	p := &stubDoneReactionPlatform{stubPlatformEngine: stubPlatformEngine{n: "dingtalk"}}
+	e := NewEngine("test", &stubAgent{}, []Platform{p}, "", LangEnglish)
+
+	sessionKey := "dingtalk:user-done"
+	session := e.sessions.GetOrCreateActive(sessionKey)
+	agentSession := newControllableSession("s-done")
+	state := &interactiveState{
+		agentSession: agentSession,
+		platform:     p,
+		replyCtx:     "ctx-done",
+	}
+	e.interactiveStates[sessionKey] = state
+
+	agentSession.events <- Event{Type: EventResult, Content: "done", Done: true}
+	e.processInteractiveEvents(state, session, e.sessions, sessionKey, "m-done", time.Now(), nil, nil, state.replyCtx)
+
+	count, ctxs := p.doneSnapshot()
+	if count != 1 {
+		t.Fatalf("done reactions = %d, want 1", count)
+	}
+	if len(ctxs) != 1 || ctxs[0] != "ctx-done" {
+		t.Fatalf("done reaction contexts = %#v, want [ctx-done]", ctxs)
 	}
 }
 
@@ -5890,9 +5938,9 @@ func (s *controllableAgentSession) Close() error {
 
 // controllableAgent lets tests control which session is returned by StartSession.
 type controllableAgent struct {
-	nextSession     AgentSession
-	listFn          func() ([]AgentSessionInfo, error)
-	startSessionFn  func(ctx context.Context, sessionID string) (AgentSession, error)
+	nextSession    AgentSession
+	listFn         func() ([]AgentSessionInfo, error)
+	startSessionFn func(ctx context.Context, sessionID string) (AgentSession, error)
 }
 
 func (a *controllableAgent) Name() string { return "controllable" }

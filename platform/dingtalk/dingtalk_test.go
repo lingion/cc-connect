@@ -1,6 +1,7 @@
 package dingtalk
 
 import (
+	"context"
 	"encoding/json"
 	"io"
 	"net/http"
@@ -138,6 +139,54 @@ func TestPlatform_AccessTokenFieldsExist(t *testing.T) {
 	}
 
 	t.Log("Platform token caching fields exist and are accessible")
+}
+
+func TestNewConfiguresReactionEmoji(t *testing.T) {
+	plat, err := New(map[string]any{
+		"client_id":     "cid",
+		"client_secret": "secret",
+	})
+	if err != nil {
+		t.Fatalf("New() error = %v", err)
+	}
+	p := plat.(*Platform)
+	if p.reactionEmoji != "🤔Thinking" {
+		t.Fatalf("default reactionEmoji = %q, want %q", p.reactionEmoji, "🤔Thinking")
+	}
+	if p.doneEmoji != "" {
+		t.Fatalf("default doneEmoji = %q, want empty", p.doneEmoji)
+	}
+
+	plat, err = New(map[string]any{
+		"client_id":      "cid",
+		"client_secret":  "secret",
+		"reaction_emoji": "none",
+		"done_emoji":     "none",
+	})
+	if err != nil {
+		t.Fatalf("New() with disabled emoji error = %v", err)
+	}
+	p = plat.(*Platform)
+	if p.reactionEmoji != "" {
+		t.Fatalf("disabled reactionEmoji = %q, want empty", p.reactionEmoji)
+	}
+	if p.doneEmoji != "" {
+		t.Fatalf("disabled doneEmoji = %q, want empty", p.doneEmoji)
+	}
+
+	plat, err = New(map[string]any{
+		"client_id":      "cid",
+		"client_secret":  "secret",
+		"reaction_emoji": "🧠Working",
+		"done_emoji":     "🥳Done",
+	})
+	if err != nil {
+		t.Fatalf("New() with custom emoji error = %v", err)
+	}
+	p = plat.(*Platform)
+	if p.reactionEmoji != "🧠Working" || p.doneEmoji != "🥳Done" {
+		t.Fatalf("emoji config = (%q, %q), want (🧠Working, 🥳Done)", p.reactionEmoji, p.doneEmoji)
+	}
 }
 
 // ──────────────────────────────────────────────────────────────
@@ -532,6 +581,52 @@ func TestOnRawMessage_QuotedInteractiveCardEnrichesMessageContent(t *testing.T) 
 	}
 }
 
+func TestOnRawMessage_IncludesReactionReplyContext(t *testing.T) {
+	var got *core.Message
+	p := &Platform{
+		handler: func(_ core.Platform, msg *core.Message) {
+			got = msg
+		},
+	}
+
+	p.onRawMessage(`{
+		"msgtype": "text",
+		"msgId": "msg-reaction-1",
+		"conversationType": "2",
+		"conversationId": "conv-1",
+		"conversationTitle": "team chat",
+		"senderStaffId": "user-1",
+		"senderNick": "Alice",
+		"sessionWebhook": "https://example.invalid/webhook",
+		"text": {
+			"content": "hi"
+		}
+	}`)
+
+	if got == nil {
+		t.Fatal("handler was not called")
+	}
+	if got.MessageID != "msg-reaction-1" {
+		t.Fatalf("MessageID = %q, want %q", got.MessageID, "msg-reaction-1")
+	}
+	rc, ok := got.ReplyCtx.(replyContext)
+	if !ok {
+		t.Fatalf("ReplyCtx type = %T, want replyContext", got.ReplyCtx)
+	}
+	if rc.messageID != "msg-reaction-1" {
+		t.Errorf("replyContext.messageID = %q, want %q", rc.messageID, "msg-reaction-1")
+	}
+	if rc.conversationId != "conv-1" {
+		t.Errorf("replyContext.conversationId = %q, want %q", rc.conversationId, "conv-1")
+	}
+	if rc.senderStaffId != "user-1" {
+		t.Errorf("replyContext.senderStaffId = %q, want %q", rc.senderStaffId, "user-1")
+	}
+	if !rc.isGroup {
+		t.Error("replyContext.isGroup = false, want true")
+	}
+}
+
 func TestFormatReplyContent_EmptyQuotedText(t *testing.T) {
 	p := &Platform{}
 	repliedContent, _ := json.Marshal(repliedTextContent{Text: ""})
@@ -688,6 +783,154 @@ func (f *fakeAccessTokenRT) RoundTrip(req *http.Request) (*http.Response, error)
 		Header:     make(http.Header),
 		Request:    req,
 	}, nil
+}
+
+type dingtalkEmotionCall struct {
+	path   string
+	header string
+	body   map[string]any
+}
+
+type fakeDingTalkEmotionRT struct {
+	calls []dingtalkEmotionCall
+}
+
+func (f *fakeDingTalkEmotionRT) RoundTrip(req *http.Request) (*http.Response, error) {
+	if req.URL.Path == "/v1.0/oauth2/accessToken" {
+		return &http.Response{
+			StatusCode: http.StatusOK,
+			Body:       io.NopCloser(strings.NewReader(`{"accessToken":"tok-emotion","expireIn":7200}`)),
+			Header:     make(http.Header),
+			Request:    req,
+		}, nil
+	}
+
+	var body map[string]any
+	if err := json.NewDecoder(req.Body).Decode(&body); err != nil {
+		return nil, err
+	}
+	f.calls = append(f.calls, dingtalkEmotionCall{
+		path:   req.URL.Path,
+		header: req.Header.Get("x-acs-dingtalk-access-token"),
+		body:   body,
+	})
+
+	return &http.Response{
+		StatusCode: http.StatusOK,
+		Body:       io.NopCloser(strings.NewReader(`{"success":true}`)),
+		Header:     make(http.Header),
+		Request:    req,
+	}, nil
+}
+
+func TestSendEmotionReply(t *testing.T) {
+	rt := &fakeDingTalkEmotionRT{}
+	p := &Platform{
+		clientID:     "cid",
+		clientSecret: "secret",
+		robotCode:    "robot-code",
+		httpClient:   &http.Client{Transport: rt},
+	}
+
+	err := p.sendEmotion(context.Background(), replyContext{
+		messageID:      "msg-1",
+		conversationId: "conv-1",
+	}, "🤔Thinking", false)
+	if err != nil {
+		t.Fatalf("sendEmotion() error = %v", err)
+	}
+	if len(rt.calls) != 1 {
+		t.Fatalf("HTTP emotion calls = %d, want 1", len(rt.calls))
+	}
+	call := rt.calls[0]
+	if call.path != "/v1.0/robot/emotion/reply" {
+		t.Fatalf("path = %q, want /v1.0/robot/emotion/reply", call.path)
+	}
+	if call.header != "tok-emotion" {
+		t.Fatalf("access token header = %q, want tok-emotion", call.header)
+	}
+	if call.body["robotCode"] != "robot-code" {
+		t.Errorf("robotCode = %v, want robot-code", call.body["robotCode"])
+	}
+	if call.body["openMsgId"] != "msg-1" {
+		t.Errorf("openMsgId = %v, want msg-1", call.body["openMsgId"])
+	}
+	if call.body["openConversationId"] != "conv-1" {
+		t.Errorf("openConversationId = %v, want conv-1", call.body["openConversationId"])
+	}
+	if call.body["emotionType"] != float64(2) {
+		t.Errorf("emotionType = %v, want 2", call.body["emotionType"])
+	}
+	if call.body["emotionName"] != "🤔Thinking" {
+		t.Errorf("emotionName = %v, want 🤔Thinking", call.body["emotionName"])
+	}
+	textEmotion, ok := call.body["textEmotion"].(map[string]any)
+	if !ok {
+		t.Fatalf("textEmotion type = %T, want object", call.body["textEmotion"])
+	}
+	if textEmotion["emotionId"] != "2659900" {
+		t.Errorf("textEmotion.emotionId = %v, want 2659900", textEmotion["emotionId"])
+	}
+	if textEmotion["emotionName"] != "🤔Thinking" || textEmotion["text"] != "🤔Thinking" {
+		t.Errorf("textEmotion = %#v, want matching custom text emoji", textEmotion)
+	}
+	if textEmotion["backgroundId"] != "im_bg_1" {
+		t.Errorf("textEmotion.backgroundId = %v, want im_bg_1", textEmotion["backgroundId"])
+	}
+}
+
+func TestSendEmotionRecall(t *testing.T) {
+	rt := &fakeDingTalkEmotionRT{}
+	p := &Platform{
+		clientID:     "cid",
+		clientSecret: "secret",
+		robotCode:    "robot-code",
+		httpClient:   &http.Client{Transport: rt},
+	}
+
+	err := p.sendEmotion(context.Background(), replyContext{
+		messageID:      "msg-1",
+		conversationId: "conv-1",
+	}, "🤔Thinking", true)
+	if err != nil {
+		t.Fatalf("sendEmotion(recall) error = %v", err)
+	}
+	if len(rt.calls) != 1 {
+		t.Fatalf("HTTP emotion calls = %d, want 1", len(rt.calls))
+	}
+	if rt.calls[0].path != "/v1.0/robot/emotion/recall" {
+		t.Fatalf("path = %q, want /v1.0/robot/emotion/recall", rt.calls[0].path)
+	}
+}
+
+func TestStartTypingAndDoneReaction(t *testing.T) {
+	rt := &fakeDingTalkEmotionRT{}
+	p := &Platform{
+		clientID:      "cid",
+		clientSecret:  "secret",
+		robotCode:     "robot-code",
+		reactionEmoji: "🤔Thinking",
+		doneEmoji:     "🥳Done",
+		httpClient:    &http.Client{Transport: rt},
+	}
+	rc := replyContext{messageID: "msg-1", conversationId: "conv-1"}
+
+	stop := p.StartTyping(context.Background(), rc)
+	stop()
+	p.AddDoneReaction(rc)
+
+	if len(rt.calls) != 3 {
+		t.Fatalf("HTTP emotion calls = %d, want 3", len(rt.calls))
+	}
+	if rt.calls[0].path != "/v1.0/robot/emotion/reply" || rt.calls[0].body["emotionName"] != "🤔Thinking" {
+		t.Fatalf("typing add call = (%s, %v), want reply 🤔Thinking", rt.calls[0].path, rt.calls[0].body["emotionName"])
+	}
+	if rt.calls[1].path != "/v1.0/robot/emotion/recall" || rt.calls[1].body["emotionName"] != "🤔Thinking" {
+		t.Fatalf("typing stop call = (%s, %v), want recall 🤔Thinking", rt.calls[1].path, rt.calls[1].body["emotionName"])
+	}
+	if rt.calls[2].path != "/v1.0/robot/emotion/reply" || rt.calls[2].body["emotionName"] != "🥳Done" {
+		t.Fatalf("done call = (%s, %v), want reply 🥳Done", rt.calls[2].path, rt.calls[2].body["emotionName"])
+	}
 }
 
 func TestOnRawMessage_PictureMsgTypeNotDroppedAsEmptyText(t *testing.T) {

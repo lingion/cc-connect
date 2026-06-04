@@ -30,6 +30,7 @@ type replyContext struct {
 	sessionWebhook string
 	conversationId string
 	senderStaffId  string
+	messageID      string
 	isGroup        bool
 	proactive      bool // true when constructed by ReconstructReplyCtx (no sessionWebhook)
 }
@@ -54,6 +55,12 @@ type repliedTextContent struct {
 
 const maxQuotedMessageRunes = 4000
 
+const (
+	defaultReactionEmoji        = "🤔Thinking"
+	customTextEmotionID         = "2659900"
+	customTextEmotionBackground = "im_bg_1"
+)
+
 type downloadResponse struct {
 	DownloadUrl string `json:"downloadUrl"`
 }
@@ -73,6 +80,8 @@ type Platform struct {
 	tokenMu               sync.Mutex
 	accessToken           string
 	tokenExpiry           time.Time
+	reactionEmoji         string
+	doneEmoji             string
 	// AI Card configuration
 	cardTemplateID  string
 	cardTemplateKey string
@@ -97,6 +106,20 @@ func New(opts map[string]any) (core.Platform, error) {
 	// Validate robot_code format (should not be empty after fallback)
 	if robotCode == "" {
 		return nil, fmt.Errorf("dingtalk: robot_code is required (or client_id)")
+	}
+
+	reactionEmoji, _ := opts["reaction_emoji"].(string)
+	reactionEmoji = strings.TrimSpace(reactionEmoji)
+	if reactionEmoji == "" {
+		reactionEmoji = defaultReactionEmoji
+	}
+	if strings.EqualFold(reactionEmoji, "none") {
+		reactionEmoji = ""
+	}
+	doneEmoji, _ := opts["done_emoji"].(string)
+	doneEmoji = strings.TrimSpace(doneEmoji)
+	if strings.EqualFold(doneEmoji, "none") {
+		doneEmoji = ""
 	}
 
 	// agent_id is required for work notifications API (numeric type)
@@ -134,6 +157,8 @@ func New(opts map[string]any) (core.Platform, error) {
 		allowFrom:             allowFrom,
 		shareSessionInChannel: shareSessionInChannel,
 		httpClient:            &http.Client{Timeout: 30 * time.Second},
+		reactionEmoji:         reactionEmoji,
+		doneEmoji:             doneEmoji,
 		cardTemplateID:        cardTemplateID,
 		cardTemplateKey:       cardTemplateKey,
 		cardThrottleMs:        cardThrottleMs,
@@ -272,6 +297,8 @@ func (p *Platform) onMessage(data *chatbot.BotCallbackDataModel, richText *richT
 				sessionWebhook: data.SessionWebhook,
 				conversationId: data.ConversationId,
 				senderStaffId:  data.SenderStaffId,
+				messageID:      data.MsgId,
+				isGroup:        data.ConversationType == "2",
 			},
 		}
 		p.handler(p, msg)
@@ -307,6 +334,7 @@ func (p *Platform) onMessage(data *chatbot.BotCallbackDataModel, richText *richT
 			sessionWebhook: data.SessionWebhook,
 			conversationId: data.ConversationId,
 			senderStaffId:  data.SenderStaffId,
+			messageID:      data.MsgId,
 			isGroup:        data.ConversationType == "2",
 		},
 	}
@@ -375,6 +403,7 @@ func (p *Platform) handleAudioMessage(data *chatbot.BotCallbackDataModel, sessio
 					sessionWebhook: data.SessionWebhook,
 					conversationId: data.ConversationId,
 					senderStaffId:  data.SenderStaffId,
+					messageID:      data.MsgId,
 					isGroup:        data.ConversationType == "2",
 				},
 				FromVoice: true,
@@ -399,6 +428,7 @@ func (p *Platform) handleAudioMessage(data *chatbot.BotCallbackDataModel, sessio
 			sessionWebhook: data.SessionWebhook,
 			conversationId: data.ConversationId,
 			senderStaffId:  data.SenderStaffId,
+			messageID:      data.MsgId,
 			isGroup:        data.ConversationType == "2",
 		},
 		FromVoice: true,
@@ -475,6 +505,8 @@ func (p *Platform) handleImageMessage(data *chatbot.BotCallbackDataModel, sessio
 			sessionWebhook: data.SessionWebhook,
 			conversationId: data.ConversationId,
 			senderStaffId:  data.SenderStaffId,
+			messageID:      data.MsgId,
+			isGroup:        data.ConversationType == "2",
 		},
 		Images: []core.ImageAttachment{{
 			MimeType: mimeType,
@@ -692,6 +724,117 @@ func (p *Platform) Send(ctx context.Context, rctx any, content string) error {
 	return p.Reply(ctx, rctx, content)
 }
 
+type dingtalkTextEmotion struct {
+	EmotionID    string `json:"emotionId"`
+	EmotionName  string `json:"emotionName"`
+	Text         string `json:"text"`
+	BackgroundID string `json:"backgroundId"`
+}
+
+type dingtalkEmotionRequest struct {
+	RobotCode          string              `json:"robotCode"`
+	OpenMsgID          string              `json:"openMsgId"`
+	OpenConversationID string              `json:"openConversationId"`
+	EmotionType        int                 `json:"emotionType"`
+	EmotionName        string              `json:"emotionName"`
+	TextEmotion        dingtalkTextEmotion `json:"textEmotion"`
+}
+
+func (p *Platform) sendEmotion(ctx context.Context, rc replyContext, emoji string, recall bool) error {
+	emoji = strings.TrimSpace(emoji)
+	if emoji == "" || rc.messageID == "" || rc.conversationId == "" {
+		return nil
+	}
+	if p.httpClient == nil {
+		p.httpClient = &http.Client{Timeout: 30 * time.Second}
+	}
+	token, err := p.getAccessToken()
+	if err != nil {
+		return fmt.Errorf("dingtalk: get access token for emotion: %w", err)
+	}
+
+	path := "/v1.0/robot/emotion/reply"
+	if recall {
+		path = "/v1.0/robot/emotion/recall"
+	}
+	requestBody := dingtalkEmotionRequest{
+		RobotCode:          p.robotCode,
+		OpenMsgID:          rc.messageID,
+		OpenConversationID: rc.conversationId,
+		EmotionType:        2,
+		EmotionName:        emoji,
+		TextEmotion: dingtalkTextEmotion{
+			EmotionID:    customTextEmotionID,
+			EmotionName:  emoji,
+			Text:         emoji,
+			BackgroundID: customTextEmotionBackground,
+		},
+	}
+	body, err := json.Marshal(requestBody)
+	if err != nil {
+		return fmt.Errorf("dingtalk: marshal emotion request: %w", err)
+	}
+
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, "https://api.dingtalk.com"+path, bytes.NewReader(body))
+	if err != nil {
+		return fmt.Errorf("dingtalk: create emotion request: %w", err)
+	}
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("x-acs-dingtalk-access-token", token)
+
+	resp, err := p.httpClient.Do(req)
+	if err != nil {
+		return fmt.Errorf("dingtalk: emotion request: %w", err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+
+	respBody, _ := io.ReadAll(resp.Body)
+	if resp.StatusCode != http.StatusOK {
+		return fmt.Errorf("dingtalk: emotion returned status %d: %s", resp.StatusCode, string(respBody))
+	}
+	if len(respBody) == 0 {
+		return nil
+	}
+	var result struct {
+		Success *bool `json:"success"`
+	}
+	if err := json.Unmarshal(respBody, &result); err == nil && result.Success != nil && !*result.Success {
+		return fmt.Errorf("dingtalk: emotion returned success=false")
+	}
+	return nil
+}
+
+// StartTyping adds a DingTalk emotion to the user's message while the agent is processing.
+func (p *Platform) StartTyping(ctx context.Context, rctx any) (stop func()) {
+	rc, ok := rctx.(replyContext)
+	if !ok || p.reactionEmoji == "" || rc.messageID == "" || rc.conversationId == "" {
+		return func() {}
+	}
+	if err := p.sendEmotion(ctx, rc, p.reactionEmoji, false); err != nil {
+		slog.Debug("dingtalk: add typing emotion failed", "error", err)
+	}
+	return func() {
+		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
+		if err := p.sendEmotion(ctx, rc, p.reactionEmoji, true); err != nil {
+			slog.Debug("dingtalk: recall typing emotion failed", "error", err)
+		}
+	}
+}
+
+// AddDoneReaction adds a DingTalk done emotion when configured.
+func (p *Platform) AddDoneReaction(rctx any) {
+	rc, ok := rctx.(replyContext)
+	if !ok || p.doneEmoji == "" || rc.messageID == "" || rc.conversationId == "" {
+		return
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	if err := p.sendEmotion(ctx, rc, p.doneEmoji, false); err != nil {
+		slog.Debug("dingtalk: add done emotion failed", "error", err)
+	}
+}
+
 // SendImage uploads and sends an image via DingTalk oToMessages API.
 // Implements core.ImageSender.
 func (p *Platform) SendImage(ctx context.Context, rctx any, img core.ImageAttachment) error {
@@ -759,6 +902,8 @@ func (p *Platform) SendImage(ctx context.Context, rctx any, img core.ImageAttach
 var _ core.ImageSender = (*Platform)(nil)
 var _ core.StreamingCardPlatform = (*Platform)(nil)
 var _ core.ReplyContextReconstructor = (*Platform)(nil)
+var _ core.TypingIndicator = (*Platform)(nil)
+var _ core.TypingIndicatorDone = (*Platform)(nil)
 
 // CreateStreamingCard creates a new streaming card for the given reply context.
 // Implements core.StreamingCardPlatform.
