@@ -391,8 +391,9 @@ const (
 	MsgPermCardNote    MsgKey = "perm_card_note"
 
 	MsgAskQuestionTitle    MsgKey = "ask_question_title"
-	MsgAskQuestionNote     MsgKey = "ask_question_note"
-	MsgAskQuestionMulti    MsgKey = "ask_question_multi"
+	MsgAskQuestionNote      MsgKey = "ask_question_note"
+	MsgAskQuestionNoteMulti MsgKey = "ask_question_note_multi"
+	MsgAskQuestionMulti     MsgKey = "ask_question_multi"
 	MsgAskQuestionPrompt   MsgKey = "ask_question_prompt"
 	MsgAskQuestionAnswered MsgKey = "ask_question_answered"
 
@@ -2517,6 +2518,13 @@ var messages = map[MsgKey]map[Language]string{
 		LangTraditionalChinese: "若按鈕無回應，請回覆選項編號（如 1）或直接輸入你的回答",
 		LangJapanese:           "ボタンが反応しない場合は、番号（例: 1）で返信するか、直接回答を入力してください",
 		LangSpanish:            "Si los botones no responden, responda con el número de opción (ej. 1) o escriba su respuesta",
+	},
+	MsgAskQuestionNoteMulti: {
+		LangEnglish:            "Reply with comma-separated option numbers (e.g. 1,3) or type your answer",
+		LangChinese:            "请回复逗号分隔的选项编号（如 1,3）或直接输入你的回答",
+		LangTraditionalChinese: "請回覆逗號分隔的選項編號（如 1,3）或直接輸入你的回答",
+		LangJapanese:           "カンマ区切りの番号（例: 1,3）で返信するか、直接回答を入力してください",
+		LangSpanish:            "Responda con los números de opción separados por comas (ej. 1,3) o escriba su respuesta",
 	},
 	MsgAskQuestionMulti: {
 		LangEnglish:            " (multiple selections allowed, separate with commas)",

@@ -9630,21 +9630,34 @@ func (e *Engine) sendAskQuestionPrompt(p Platform, replyCtx any, questions []Use
 		cb := NewCard().Title(e.i18n.T(MsgAskQuestionTitle)+titleSuffix, "blue")
 		body := "**" + q.Question + "**"
 		if q.MultiSelect {
-			body += e.i18n.T(MsgAskQuestionMulti)
-		}
-		cb.Markdown(body)
-		for i, opt := range q.Options {
-			desc := opt.Label
-			if opt.Description != "" {
-				desc += " — " + opt.Description
+			// For multiSelect, buttons would resolve on the first click and prevent
+			// selecting multiple options. Render options as a numbered text list
+			// instead, and instruct the user to reply with comma-separated numbers.
+			body += e.i18n.T(MsgAskQuestionMulti) + "\n\n"
+			for i, opt := range q.Options {
+				body += fmt.Sprintf("%d. **%s**", i+1, opt.Label)
+				if opt.Description != "" {
+					body += " — " + opt.Description
+				}
+				body += "\n"
 			}
-			answerData := fmt.Sprintf("askq:%d:%d", qIdx, i+1)
-			cb.ListItemBtnExtra(desc, opt.Label, "default", answerData, map[string]string{
-				"askq_label":    opt.Label,
-				"askq_question": q.Question,
-			})
+			cb.Markdown(body)
+			cb.Note(e.i18n.T(MsgAskQuestionNoteMulti))
+		} else {
+			cb.Markdown(body)
+			for i, opt := range q.Options {
+				desc := opt.Label
+				if opt.Description != "" {
+					desc += " — " + opt.Description
+				}
+				answerData := fmt.Sprintf("askq:%d:%d", qIdx, i+1)
+				cb.ListItemBtnExtra(desc, opt.Label, "default", answerData, map[string]string{
+					"askq_label":    opt.Label,
+					"askq_question": q.Question,
+				})
+			}
+			cb.Note(e.i18n.T(MsgAskQuestionNote))
 		}
-		cb.Note(e.i18n.T(MsgAskQuestionNote))
 		e.sendWithCard(p, replyCtx, cb.Build())
 		return
 	}
