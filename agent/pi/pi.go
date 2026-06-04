@@ -197,11 +197,16 @@ func (a *Agent) ProjectMemoryFile() string {
 }
 
 func (a *Agent) GlobalMemoryFile() string {
-	homeDir, err := os.UserHomeDir()
-	if err != nil {
-		return ""
+	// Use PI_CODING_AGENT_DIR if set, otherwise default to ~/.pi/agent/.
+	agentDir := os.Getenv("PI_CODING_AGENT_DIR")
+	if agentDir == "" {
+		homeDir, err := os.UserHomeDir()
+		if err != nil {
+			return ""
+		}
+		agentDir = filepath.Join(homeDir, ".pi", "agent")
 	}
-	return filepath.Join(homeDir, ".pi", "AGENTS.md")
+	return filepath.Join(agentDir, "AGENTS.md")
 }
 
 // ── ReasoningEffortSwitcher ──────────────────────────────────
@@ -250,9 +255,23 @@ func (a *Agent) SkillDirs() []string {
 	if err != nil {
 		absDir = a.workDir
 	}
-	dirs := []string{filepath.Join(absDir, ".pi", "skills")}
-	if home, err := os.UserHomeDir(); err == nil {
-		dirs = append(dirs, filepath.Join(home, ".pi", "skills"))
+	dirs := []string{filepath.Join(absDir, ".pi", "agent", "skills")}
+
+	homeDir, err := os.UserHomeDir()
+	if err == nil {
+		// Default pi agent skill directory.
+		dirs = append(dirs, filepath.Join(homeDir, ".pi", "agent", "skills"))
+		// Common shared skill directory used by lark-cli and other agent tools.
+		dirs = append(dirs, filepath.Join(homeDir, ".agents", "skills"))
+
+		// If PI_CODING_AGENT_DIR is set, also scan skills under that directory.
+		if agentDir := os.Getenv("PI_CODING_AGENT_DIR"); agentDir != "" {
+			if filepath.IsAbs(agentDir) {
+				dirs = append(dirs, filepath.Join(agentDir, "skills"))
+			} else {
+				dirs = append(dirs, filepath.Join(homeDir, agentDir, "skills"))
+			}
+		}
 	}
 	return dirs
 }
