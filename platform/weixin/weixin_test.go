@@ -6,7 +6,12 @@ import (
 	"errors"
 	"net/http"
 	"net/http/httptest"
+	"sync"
+	"sync/atomic"
 	"testing"
+	"time"
+
+	"github.com/chenhg5/cc-connect/core"
 )
 
 func TestBodyFromItemList_Text(t *testing.T) {
@@ -197,4 +202,145 @@ type roundTripFunc func(*http.Request) (*http.Response, error)
 
 func (f roundTripFunc) RoundTrip(r *http.Request) (*http.Response, error) {
 	return f(r)
+}
+
+// testLifecycleHandler captures lifecycle callbacks from a platform so tests
+// can assert that OnPlatformReady is invoked at the right moment.
+type testLifecycleHandler struct {
+	mu          sync.Mutex
+	readyCount  int32
+	readyCh     chan struct{}
+	unavailable []error
+}
+
+func newTestLifecycleHandler() *testLifecycleHandler {
+	return &testLifecycleHandler{readyCh: make(chan struct{}, 1)}
+}
+
+func (h *testLifecycleHandler) OnPlatformReady(p core.Platform) {
+	if atomic.AddInt32(&h.readyCount, 1) == 1 {
+		h.readyCh <- struct{}{}
+	}
+}
+
+func (h *testLifecycleHandler) OnPlatformUnavailable(p core.Platform, err error) {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	h.unavailable = append(h.unavailable, err)
+}
+
+func (h *testLifecycleHandler) ReadyCount() int {
+	return int(atomic.LoadInt32(&h.readyCount))
+}
+
+// newILinkTestServer returns an httptest.Server that responds to ilink
+// long-poll getUpdates calls with the provided body and status. Tests can
+// inspect callCount to confirm pollLoop actually issued requests.
+type ilinkTestServer struct {
+	server    *httptest.Server
+	callCount atomic.Int32
+	body      string
+	status    int
+}
+
+func newILinkTestServer(status int, body string) *ilinkTestServer {
+	s := &ilinkTestServer{body: body, status: status}
+	s.server = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		s.callCount.Add(1)
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(status)
+		_, _ = w.Write([]byte(body))
+	}))
+	return s
+}
+
+func (s *ilinkTestServer) Close() { s.server.Close() }
+func (s *ilinkTestServer) URL() string {
+	return s.server.URL
+}
+
+func TestPollLoop_NotifiesReadyForPollAfterFirstSuccessfulGetUpdates(t *testing.T) {
+	body := `{"ret":0,"errcode":0,"msgs":[],"get_updates_buf":"buf-1"}`
+	srv := newILinkTestServer(http.StatusOK, body)
+	defer srv.Close()
+
+	p := &Platform{
+		token:         "tok",
+		baseURL:       srv.URL(),
+		longPollMS:    100,
+		accountLabel:  "default",
+		httpClient:    &http.Client{},
+		dedup:         make(map[string]time.Time),
+		typingTickets: make(map[string]typingTicketEntry),
+	}
+	p.api = newAPIClient(srv.URL(), "tok", "", p.httpClient)
+
+	handler := newTestLifecycleHandler()
+	p.SetLifecycleHandler(handler)
+
+	if err := p.Start(func(core.Platform, *core.Message) {}); err != nil {
+		t.Fatalf("Start: %v", err)
+	}
+	t.Cleanup(func() { _ = p.Stop() })
+
+	select {
+	case <-handler.readyCh:
+	case <-time.After(3 * time.Second):
+		t.Fatalf("OnPlatformReady not observed within timeout (readyCount=%d, getUpdatesCalls=%d)",
+			handler.ReadyCount(), srv.callCount.Load())
+	}
+
+	// Give pollLoop enough time to issue at least one more getUpdates; the
+	// ready signal must remain a one-shot event.
+	time.Sleep(400 * time.Millisecond)
+
+	if got := handler.ReadyCount(); got != 1 {
+		t.Fatalf("ready callbacks = %d, want exactly 1 (one-shot)", got)
+	}
+	if got := srv.callCount.Load(); got < 2 {
+		t.Fatalf("getUpdates calls = %d, want >= 2 (pollLoop should keep polling)", got)
+	}
+}
+
+func TestPollLoop_DoesNotNotifyReadyForPollWhileGetUpdatesFails(t *testing.T) {
+	srv := newILinkTestServer(http.StatusInternalServerError, `{"ret":-1}`)
+	defer srv.Close()
+
+	p := &Platform{
+		token:         "tok",
+		baseURL:       srv.URL(),
+		longPollMS:    100,
+		accountLabel:  "default",
+		httpClient:    &http.Client{},
+		dedup:         make(map[string]time.Time),
+		typingTickets: make(map[string]typingTicketEntry),
+	}
+	p.api = newAPIClient(srv.URL(), "tok", "", p.httpClient)
+
+	handler := newTestLifecycleHandler()
+	p.SetLifecycleHandler(handler)
+
+	if err := p.Start(func(core.Platform, *core.Message) {}); err != nil {
+		t.Fatalf("Start: %v", err)
+	}
+	t.Cleanup(func() { _ = p.Stop() })
+
+	// While every getUpdates returns 500, the backoff grows (1s, 2s, 4s, …).
+	// Within 2.5s we expect at least one more failed attempt but never a
+	// ready-for-poll signal.
+	time.Sleep(2500 * time.Millisecond)
+
+	if got := handler.ReadyCount(); got != 0 {
+		t.Fatalf("ready callbacks = %d, want 0 while getUpdates fails", got)
+	}
+	if got := srv.callCount.Load(); got < 1 {
+		t.Fatalf("getUpdates calls = %d, want >= 1 (pollLoop should be retrying)", got)
+	}
+}
+
+func TestPlatform_ImplementsAsyncRecoverablePlatform(t *testing.T) {
+	var p core.Platform = &Platform{}
+	if _, ok := p.(core.AsyncRecoverablePlatform); !ok {
+		t.Fatal("weixin Platform must implement core.AsyncRecoverablePlatform so the engine waits for ready-for-poll")
+	}
 }
