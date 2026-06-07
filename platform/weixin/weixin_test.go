@@ -6,6 +6,8 @@ import (
 	"errors"
 	"net/http"
 	"net/http/httptest"
+	"os"
+	"path/filepath"
 	"sync"
 	"sync/atomic"
 	"testing"
@@ -342,5 +344,102 @@ func TestPlatform_ImplementsAsyncRecoverablePlatform(t *testing.T) {
 	var p core.Platform = &Platform{}
 	if _, ok := p.(core.AsyncRecoverablePlatform); !ok {
 		t.Fatal("weixin Platform must implement core.AsyncRecoverablePlatform so the engine waits for ready-for-poll")
+	}
+}
+
+// TestContextToken_PersistAndReload verifies that context_token values written
+// via setContextToken survive a process restart by being persisted to
+// context_tokens.json and reloaded into the in-memory map on the next startup.
+// This is the regression coverage for #1087.
+func TestContextToken_PersistAndReload(t *testing.T) {
+	dir := t.TempDir()
+	tokensPath := filepath.Join(dir, "context_tokens.json")
+
+	// 1. First "process": store two context_tokens, then verify the file exists
+	//    with the expected JSON content.
+	p1 := &Platform{
+		tokens:     make(map[string]string),
+		tokensPath: tokensPath,
+	}
+	p1.setContextToken("user-aaa", "token-A")
+	p1.setContextToken("user-bbb", "token-B")
+
+	if _, err := os.Stat(tokensPath); err != nil {
+		t.Fatalf("expected context_tokens.json at %s, got: %v", tokensPath, err)
+	}
+
+	// Confirm the on-disk format is a JSON object keyed by peer user ID.
+	raw, err := os.ReadFile(tokensPath)
+	if err != nil {
+		t.Fatalf("read tokens file: %v", err)
+	}
+	var onDisk map[string]string
+	if err := json.Unmarshal(raw, &onDisk); err != nil {
+		t.Fatalf("parse tokens file: %v (raw=%q)", err, string(raw))
+	}
+	if onDisk["user-aaa"] != "token-A" || onDisk["user-bbb"] != "token-B" {
+		t.Fatalf("on-disk tokens = %v, want user-aaa=token-A user-bbb=token-B", onDisk)
+	}
+
+	// 2. Second "process": same stateDir, fresh in-memory map. loadTokens()
+	//    must read the file and populate the map.
+	p2 := &Platform{
+		tokens:     make(map[string]string),
+		tokensPath: tokensPath,
+	}
+	p2.loadTokens()
+
+	if got := p2.getContextToken("user-aaa"); got != "token-A" {
+		t.Errorf("after reload, user-aaa = %q, want %q", got, "token-A")
+	}
+	if got := p2.getContextToken("user-bbb"); got != "token-B" {
+		t.Errorf("after reload, user-bbb = %q, want %q", got, "token-B")
+	}
+
+	// 3. ReconstructReplyCtx (the cron / cc-connect send path) must succeed
+	//    using the reloaded token.
+	rc, err := p2.ReconstructReplyCtx(sessionKeyPrefix + "user-aaa")
+	if err != nil {
+		t.Fatalf("ReconstructReplyCtx after reload: %v", err)
+	}
+	concrete, ok := rc.(*replyContext)
+	if !ok {
+		t.Fatalf("ReconstructReplyCtx returned %T, want *replyContext", rc)
+	}
+	if concrete.contextToken != "token-A" {
+		t.Errorf("reloaded contextToken = %q, want %q", concrete.contextToken, "token-A")
+	}
+}
+
+// TestContextToken_LoadMissingFile is a no-op fallback: if the persistence
+// file does not exist (first run, or after a cleanup), loadTokens must not
+// error and the in-memory map must remain empty.
+func TestContextToken_LoadMissingFile(t *testing.T) {
+	dir := t.TempDir()
+	p := &Platform{
+		tokens:     make(map[string]string),
+		tokensPath: filepath.Join(dir, "does-not-exist.json"),
+	}
+	// Should not panic, should not return an error.
+	p.loadTokens()
+	if got := p.getContextToken("anyone"); got != "" {
+		t.Errorf("getContextToken on fresh state = %q, want empty", got)
+	}
+}
+
+// TestReconstructReplyCtx_MissingToken verifies the cron / cc-connect send
+// path returns the expected actionable error when no context_token has ever
+// been stored for a peer. This is the "user must message the bot first"
+// case that the original #1087 reporter hit.
+func TestReconstructReplyCtx_MissingToken(t *testing.T) {
+	p := &Platform{
+		tokens: make(map[string]string),
+	}
+	_, err := p.ReconstructReplyCtx(sessionKeyPrefix + "never-messaged-user")
+	if err == nil {
+		t.Fatal("expected error for missing context_token, got nil")
+	}
+	if !containsStr(err.Error(), "no stored context_token") {
+		t.Errorf("error = %q, want it to mention 'no stored context_token'", err.Error())
 	}
 }
