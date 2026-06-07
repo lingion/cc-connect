@@ -107,15 +107,29 @@ func runSessions(args []string) {
 		runSessionsShow(dataDir, id, limit)
 	case "prune":
 		var mergeHistory bool
+		var emptyOnly bool
 		var project string
 		for i := 0; i < len(positional); i++ {
 			if positional[i] == "--merge" {
 				mergeHistory = true
 			} else if positional[i] == "--empty" {
-				// Only remove empty sessions
+				// Explicit alias for the default (non-merge) behaviour:
+				// only sessions with no history get removed. Accepted so
+				// scripts can declare intent without relying on the
+				// implicit "no --merge" default.
+				emptyOnly = true
 			} else if project == "" {
 				project = positional[i]
 			}
+		}
+		// --empty and --merge are mutually exclusive; --merge wins because
+		// it is the more destructive option and the user explicitly opted
+		// into it. emptyOnly without --merge is the same as the default.
+		if emptyOnly && mergeHistory {
+			fmt.Fprintln(os.Stderr, "Warning: --empty is ignored when --merge is set")
+		}
+		if emptyOnly {
+			mergeHistory = false
 		}
 		runSessionsPrune(dataDir, project, mergeHistory)
 	default:
@@ -426,6 +440,9 @@ Session ID formats for 'show':
 Prune options:
   --merge    Merge history from removed sessions into kept one
              (without --merge, only removes sessions with no history)
+  --empty    Same as the default (no --merge): remove only empty sessions.
+             Useful in scripts to declare intent explicitly. Ignored if
+             --merge is also set.
 
 Examples:
   cc-connect sessions                           Interactive TUI browser
@@ -433,6 +450,7 @@ Examples:
   cc-connect sessions show "mybot:s1"           Show all messages in session
   cc-connect sessions show "#1" -n 20           Show last 20 messages of first session
   cc-connect sessions prune                     Remove empty duplicate sessions
+  cc-connect sessions prune --empty             Same as above, explicit form
   cc-connect sessions prune --merge             Merge duplicates, keeping most recent
   cc-connect sessions prune mybot --merge       Prune specific project`)
 }

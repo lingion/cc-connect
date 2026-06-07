@@ -871,11 +871,12 @@ func (sm *SessionManager) PruneDuplicateSessions(mergeHistory bool) PruneResult 
 			if mergeHistory && hasHistory {
 				keep.mu.Lock()
 				old.mu.Lock()
-				// Append old history to keep, then sort by timestamp
-				for _, entry := range old.History {
-					keep.History = append(keep.History, entry)
-				}
-				sort.Slice(keep.History, func(i, j int) bool {
+				// Append old history to keep, then sort by timestamp.
+				// Use SliceStable so that entries with equal timestamps
+				// preserve their original relative order — relevant for
+				// IM platforms that timestamp at second precision.
+				keep.History = append(keep.History, old.History...)
+				sort.SliceStable(keep.History, func(i, j int) bool {
 					return keep.History[i].Timestamp.Before(keep.History[j].Timestamp)
 				})
 				result.MergedHistory += oldHistoryLen

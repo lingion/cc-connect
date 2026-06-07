@@ -738,6 +738,59 @@ func TestPruneDuplicateSessions_NoMergeKeepsHistory(t *testing.T) {
 	}
 }
 
+// TestPruneDuplicateSessions_NoMergeKeepsBothWithHistory locks down the
+// no-merge path when BOTH duplicate sessions have history. With
+// mergeHistory=false, neither session is considered "removable" (the
+// branch at session.go:700-702 skips entries where hasHistory is true
+// for the kept candidate), so both must survive the prune untouched.
+//
+// Without this test the existing TestPruneDuplicateSessions_NoMergeKeepsHistory
+// only covers the "one empty + one has history" case and would not catch
+// a regression that incorrectly drops a non-empty duplicate.
+func TestPruneDuplicateSessions_NoMergeKeepsBothWithHistory(t *testing.T) {
+	sm := NewSessionManager("")
+
+	// Same chat, different users, both with history
+	s1 := sm.GetOrCreateActive("feishu:oc_chat1:ou_user1")
+	s2 := sm.NewSession("feishu:oc_chat1:ou_user2", "user2-session")
+
+	s1.AddHistory("user", "msg from user1")
+	s2.AddHistory("user", "msg from user2")
+
+	// Make sure both are recognized as duplicates of the same chat.
+	// baseChat is derived from the user key via ParseSessionKey, not
+	// stored on the Session struct.
+	_, s1Base, _ := ParseSessionKey("feishu:oc_chat1:ou_user1")
+	_, s2Base, _ := ParseSessionKey("feishu:oc_chat1:ou_user2")
+	if s1Base != "feishu:oc_chat1" || s2Base != "feishu:oc_chat1" {
+		t.Fatalf("test setup: both sessions must share baseChat, got %q and %q",
+			s1Base, s2Base)
+	}
+
+	result := sm.PruneDuplicateSessions(false) // NO merge
+
+	if len(result.RemovedSessions) != 0 {
+		t.Errorf("removed %d sessions, want 0 (both have history, no merge)",
+			len(result.RemovedSessions))
+	}
+	if sm.FindByID(s1.ID) == nil {
+		t.Error("s1 (has history) should be kept when mergeHistory=false")
+	}
+	if sm.FindByID(s2.ID) == nil {
+		t.Error("s2 (has history) should be kept when mergeHistory=false")
+	}
+
+	// And the kept candidates' history must NOT be merged away
+	s1After := sm.FindByID(s1.ID)
+	s2After := sm.FindByID(s2.ID)
+	if len(s1After.History) != 1 || s1After.History[0].Content != "msg from user1" {
+		t.Errorf("s1 history was mutated: %+v", s1After.History)
+	}
+	if len(s2After.History) != 1 || s2After.History[0].Content != "msg from user2" {
+		t.Errorf("s2 history was mutated: %+v", s2After.History)
+	}
+}
+
 func TestPruneDuplicateSessions_ThreadIsolation(t *testing.T) {
 	sm := NewSessionManager("")
 
