@@ -1,5 +1,10 @@
 # Changelog
 
+## Unreleased
+
+### Security
+- **BREAKING: `allow_from` default changed from allow-all to fail-closed.** The legacy behavior treated an empty `allow_from` as “permit every user” (or any `*` wildcard as the same). Starting with v1.4.0, `allow_from` (and the platform-level `allow_chat`) **default to deny-all when empty**. Users upgrading from <v1.4.0 MUST explicitly set `allow_from` in `[[projects]]` (or `[platform.<name>.options]`) to grant access — otherwise the platform will reject every incoming message and log a clear `WARN` with the platform name and a hint to set `allow_from`. The wildcard `allow_from = "*"` is still supported and reproduces the old behavior; it should be used only as a temporary migration step and replaced with an explicit user list before going to production. Same rule applies to `allow_chat` for chat/group allow-listing. See the “Security defaults” callout at the top of `config.example.toml` for the migration recipe.
+
 ### New Features
 - **QQ Bot inline keyboard**: add support for inline keyboard buttons and INTERACTION_CREATE events. Permission requests now render as clickable buttons instead of text replies. Requires enabling the INTERACTION capability (bit 26) in the QQ Open Platform bot settings.
 
