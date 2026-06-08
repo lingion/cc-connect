@@ -406,6 +406,50 @@ func (a *Agent) SetPlatformPrompt(prompt string) {
 	a.platformPrompt = prompt
 }
 
+// ValidateSessionID reports whether the given session ID exists in this
+// agent's per-project session store (issue #599). It is the agent-side
+// implementation of core.SessionIDValidator: when the engine is about to
+// resume a session whose stored ID was inherited from another project, the
+// engine calls this and — on a false return — clears the ID and starts a
+// fresh session instead of reloading the wrong conversation.
+func (a *Agent) ValidateSessionID(_ context.Context, sessionID string) bool {
+	if sessionID == "" {
+		return false
+	}
+	homeDir, err := os.UserHomeDir()
+	if err != nil {
+		return false
+	}
+	a.mu.RLock()
+	workDir := a.workDir
+	a.mu.RUnlock()
+	return validateSessionIDInProject(homeDir, workDir, sessionID)
+}
+
+// validateSessionIDInProject checks whether sessionID has a .jsonl file
+// under the per-project directory that Claude Code derives from workDir.
+// Split out from (*Agent).ValidateSessionID so the logic can be unit
+// tested without touching the real $HOME.
+func validateSessionIDInProject(homeDir, workDir, sessionID string) bool {
+	if sessionID == "" {
+		return false
+	}
+	if homeDir == "" || workDir == "" {
+		return false
+	}
+	absWorkDir, err := filepath.Abs(workDir)
+	if err != nil {
+		return false
+	}
+	projectDir := findProjectDir(homeDir, absWorkDir)
+	if projectDir == "" {
+		return false
+	}
+	path := filepath.Join(projectDir, sessionID+".jsonl")
+	_, err = os.Stat(path)
+	return err == nil
+}
+
 // StartSession creates a persistent interactive Claude Code session.
 func (a *Agent) StartSession(ctx context.Context, sessionID string) (core.AgentSession, error) {
 	a.mu.Lock()

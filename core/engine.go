@@ -3170,6 +3170,20 @@ func (e *Engine) getOrCreateInteractiveStateWith(sessionKey string, p Platform, 
 	// is unbound, force a fresh start instead of attaching to whichever CLI
 	// conversation happens to be "latest" in this workspace.
 	startSessionID := session.GetAgentSessionID()
+	// Cross-project session leakage guard (issue #599): if a session ID was
+	// inherited from a different project's workspace (e.g. another
+	// cc-connect project that happens to share a Session row), the agent
+	// can detect the mismatch and we should clear the ID rather than
+	// resume a conversation that has nothing to do with this project.
+	if startSessionID != "" {
+		if validator, ok := agent.(SessionIDValidator); ok && !validator.ValidateSessionID(e.ctx, startSessionID) {
+			slog.Warn("session ID does not belong to this project, clearing it",
+				"session_key", sessionKey, "invalid_session_id", startSessionID)
+			session.SetAgentSessionID("", agent.Name())
+			sessions.Save()
+			startSessionID = ""
+		}
+	}
 	isResume := startSessionID != ""
 	startAt := time.Now()
 	agentSession, err := agent.StartSession(e.ctx, startSessionID)
