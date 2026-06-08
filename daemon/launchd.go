@@ -280,6 +280,8 @@ func buildPlist(cfg Config) string {
 		<string>%s</string>
 		<key>CC_LOG_MAX_SIZE</key>
 		<string>%d</string>
+		<key>CC_LOG_MAX_BACKUPS</key>
+		<string>%d</string>
 		<key>PATH</key>
 		<string>%s</string>
 	</dict>
@@ -289,7 +291,7 @@ func buildPlist(cfg Config) string {
 	<string>/dev/null</string>
 </dict>
 </plist>
-`, launchdLabel, xmlEscape(cfg.BinaryPath), xmlEscape(cfg.WorkDir), xmlEscape(cfg.LogFile), cfg.LogMaxSize, xmlEscape(envPATH))
+`, launchdLabel, xmlEscape(cfg.BinaryPath), xmlEscape(cfg.WorkDir), xmlEscape(cfg.LogFile), cfg.LogMaxSize, cfg.LogMaxBackups, xmlEscape(envPATH))
 }
 
 // xmlEscape escapes the five XML-reserved characters in a string so it can
