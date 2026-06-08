@@ -49,6 +49,15 @@ type SendRequest struct {
 	Videos     []FileAttachment  `json:"videos,omitempty"`
 	AtUsers    []string          `json:"at_users,omitempty"`
 	AtAll      bool              `json:"at_all,omitempty"`
+	// AsPrompt, when true, injects the message into the running agent session
+	// as a user prompt instead of posting to the platform. Combined with
+	// NewThread, it posts to a new top-level thread AND injects as a prompt
+	// (see issue #590).
+	AsPrompt bool `json:"as_prompt,omitempty"`
+	// NewThread, when true, posts the message as a new top-level message
+	// rather than replying in the existing thread. Only effective when the
+	// underlying platform supports top-level posting (Send).
+	NewThread bool `json:"new_thread,omitempty"`
 }
 
 // NewAPIServer creates an API server on a Unix socket.
@@ -198,11 +207,28 @@ func (s *APIServer) handleSend(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if req.Message != "" || len(req.Images) > 0 || len(req.Files) > 0 {
-		if err := engine.SendToSessionWithAttachments(req.SessionKey, req.Message, req.Images, req.Files, req.AtUsers, req.AtAll); err != nil {
-			http.Error(w, err.Error(), http.StatusInternalServerError)
-			return
+	// Dispatch based on AsPrompt / NewThread combination. When both are
+	// false, fall through to the legacy SendToSessionWithAttachments path
+	// so the AtUsers / AtAll behavior is preserved exactly.
+	var sendErr error
+	switch {
+	case req.AsPrompt && req.NewThread:
+		// Post to platform as a new thread AND inject as a prompt. AtUsers
+		// and attachments are ignored here — they are not meaningful in
+		// the "programmatic prompt" path.
+		sendErr = engine.InjectPromptToNewThread(req.SessionKey, req.Message)
+	case req.AsPrompt:
+		sendErr = engine.InjectPrompt(req.SessionKey, req.Message, req.Images, req.Files)
+	case req.NewThread:
+		sendErr = engine.PostToNewThread(req.SessionKey, req.Message)
+	default:
+		if req.Message != "" || len(req.Images) > 0 || len(req.Files) > 0 {
+			sendErr = engine.SendToSessionWithAttachments(req.SessionKey, req.Message, req.Images, req.Files, req.AtUsers, req.AtAll)
 		}
+	}
+	if sendErr != nil {
+		http.Error(w, sendErr.Error(), http.StatusInternalServerError)
+		return
 	}
 
 	if len(req.Audios) > 0 {

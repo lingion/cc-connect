@@ -142,6 +142,10 @@ func parseSendArgs(args []string) (core.SendRequest, string, error) {
 			}
 		case "--at-all":
 			req.AtAll = true
+		case "--as-prompt":
+			req.AsPrompt = true
+		case "--new-thread":
+			req.NewThread = true
 		case "--data-dir":
 			if i+1 >= len(args) {
 				return req, "", fmt.Errorf("--data-dir requires a value")
@@ -356,6 +360,8 @@ Options:
       --stdin              Read message from stdin (best for long/special-char messages)
       --at-users <ids>     @ user IDs, comma-separated (DingTalk)
       --at-all             @ everyone (DingTalk)
+      --as-prompt          Inject the message into the agent's session as a prompt (skip platform post)
+      --new-thread         Post to the platform as a new top-level message (not as a thread reply)
   -p, --project <name>     Target project (optional if only one project)
   -s, --session <key>      Target session key (optional, picks first active)
       --data-dir <path>    Data directory (default: ~/.cc-connect)
@@ -369,6 +375,9 @@ Examples:
   cc-connect send --video /tmp/demo.mp4
   cc-connect send --audio /tmp/voice.opus
   cc-connect send --tts "Hello from cc-connect"
+  cc-connect send --as-prompt "Check the latest commits"
+  cc-connect send --new-thread "Build completed"
+  cc-connect send --as-prompt --new-thread "Process this in a fresh thread"
   cc-connect send --stdin <<'EOF'
     Long message with "special" chars, $variables, and newlines
   EOF`)

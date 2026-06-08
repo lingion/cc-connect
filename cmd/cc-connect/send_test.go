@@ -293,3 +293,48 @@ func TestBuildSendPayload_JSONRoundTrip(t *testing.T) {
 		t.Fatalf("decoded files = %#v", decoded.Files)
 	}
 }
+
+// TestParseSendArgs_AsPromptAndNewThread exercises the --as-prompt and
+// --new-thread flags introduced for issue #590. The two flags can be
+// combined for completion-watcher flows that need both a visible
+// notification and an auto-processed task.
+func TestParseSendArgs_AsPromptAndNewThread(t *testing.T) {
+	cases := []struct {
+		name string
+		args []string
+		want core.SendRequest
+	}{
+		{
+			name: "as_prompt_only",
+			args: []string{"-m", "check commits", "--as-prompt"},
+			want: core.SendRequest{Message: "check commits", AsPrompt: true},
+		},
+		{
+			name: "new_thread_only",
+			args: []string{"-m", "build done", "--new-thread"},
+			want: core.SendRequest{Message: "build done", NewThread: true},
+		},
+		{
+			name: "as_prompt_and_new_thread_combined",
+			args: []string{"-m", "process in fresh thread", "--as-prompt", "--new-thread"},
+			want: core.SendRequest{Message: "process in fresh thread", AsPrompt: true, NewThread: true},
+		},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			req, _, err := parseSendArgs(tc.args)
+			if err != nil {
+				t.Fatalf("parseSendArgs: %v", err)
+			}
+			if req.AsPrompt != tc.want.AsPrompt {
+				t.Errorf("AsPrompt = %v, want %v", req.AsPrompt, tc.want.AsPrompt)
+			}
+			if req.NewThread != tc.want.NewThread {
+				t.Errorf("NewThread = %v, want %v", req.NewThread, tc.want.NewThread)
+			}
+			if req.Message != tc.want.Message {
+				t.Errorf("Message = %q, want %q", req.Message, tc.want.Message)
+			}
+		})
+	}
+}

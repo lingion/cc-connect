@@ -10604,6 +10604,183 @@ func (e *Engine) resolveOutboundSessionTarget(sessionKey string, hasAttachments 
 	return state, p, replyCtx, nil
 }
 
+// InjectPrompt injects a message directly into the agent's stdin as if the user
+// had sent it. The message is not posted to the platform; only the running
+// agent session sees it. This is useful for programmatic triggering of agent
+// actions (e.g. cron jobs, completion watchers) where the user-facing channel
+// already received the message via a different path.
+func (e *Engine) InjectPrompt(sessionKey, message string, images []ImageAttachment, files []FileAttachment) error {
+	if message == "" && len(images) == 0 && len(files) == 0 {
+		return fmt.Errorf("message or attachment is required")
+	}
+	state := e.lookupInteractiveState(sessionKey)
+	if state == nil {
+		return fmt.Errorf("no active session found (key=%q)", sessionKey)
+	}
+	state.mu.Lock()
+	as := state.agentSession
+	state.mu.Unlock()
+	if as == nil || !as.Alive() {
+		return fmt.Errorf("agent session not alive for InjectPrompt (key=%q)", sessionKey)
+	}
+
+	prompt := message
+	if e.injectSender {
+		state.mu.Lock()
+		p := state.platform
+		sk := e.lookupSessionKeyForStateLocked(state)
+		state.mu.Unlock()
+		var platformName string
+		if p != nil {
+			platformName = p.Name()
+		}
+		prompt = e.buildSenderPrompt(message, "", "", platformName, sk, "")
+	}
+
+	if err := as.Send(prompt, images, files); err != nil {
+		return fmt.Errorf("inject prompt: %w", err)
+	}
+	slog.Info("inject prompt sent to agent", "session_key", sessionKey, "message_len", len(message))
+	return nil
+}
+
+// PostToNewThread posts a message to the platform as a new top-level message
+// (not as a reply in the existing thread). The agent is not invoked. This is
+// the half of completion-watcher flows that announces a new event without
+// spawning an inline conversation.
+func (e *Engine) PostToNewThread(sessionKey, message string) error {
+	if message == "" {
+		return fmt.Errorf("message is required")
+	}
+	p, replyCtx, err := e.resolvePlatformForSend(sessionKey)
+	if err != nil {
+		return err
+	}
+	if err := e.waitOutgoing(p); err != nil {
+		return err
+	}
+	if err := p.Send(e.ctx, replyCtx, message); err != nil {
+		return fmt.Errorf("post to new thread: %w", err)
+	}
+	slog.Info("posted message to new thread", "session_key", sessionKey, "platform", p.Name())
+	return nil
+}
+
+// InjectPromptToNewThread combines InjectPrompt and PostToNewThread: the
+// message is posted to the platform as a new top-level message AND injected
+// into the agent session as a prompt. The intended use case is a
+// completion-watcher that needs both a visible notification and an
+// auto-processed task.
+func (e *Engine) InjectPromptToNewThread(sessionKey, message string) error {
+	if err := e.PostToNewThread(sessionKey, message); err != nil {
+		return err
+	}
+	if err := e.InjectPrompt(sessionKey, message, nil, nil); err != nil {
+		return fmt.Errorf("inject prompt to new thread: %w", err)
+	}
+	return nil
+}
+
+// lookupInteractiveState returns the active state for a given session key,
+// applying the same multi-workspace and "single session" fallbacks as
+// SendToSessionWithAttachments so all three *Send helpers behave consistently.
+func (e *Engine) lookupInteractiveState(sessionKey string) *interactiveState {
+	e.interactiveMu.Lock()
+	defer e.interactiveMu.Unlock()
+
+	if sessionKey != "" {
+		if s := e.interactiveStates[sessionKey]; s != nil {
+			return s
+		}
+		if e.multiWorkspace {
+			if iKey := e.interactiveKeyForSessionKeyLocked(sessionKey); iKey != sessionKey {
+				if s := e.interactiveStates[iKey]; s != nil {
+					return s
+				}
+			}
+		}
+		return nil
+	}
+	if len(e.interactiveStates) == 1 {
+		for _, s := range e.interactiveStates {
+			return s
+		}
+	}
+	return nil
+}
+
+// lookupSessionKeyForStateLocked returns the session key for the given state
+// by scanning interactiveStates. Caller must hold e.interactiveMu OR the
+// state.mu for the duration; here we rely on the caller holding state.mu and
+// the interactive map being effectively immutable for the duration of a turn.
+func (e *Engine) lookupSessionKeyForStateLocked(state *interactiveState) string {
+	if state == nil {
+		return ""
+	}
+	e.interactiveMu.Lock()
+	defer e.interactiveMu.Unlock()
+	for k, s := range e.interactiveStates {
+		if s == state {
+			return k
+		}
+	}
+	return ""
+}
+
+// resolvePlatformForSend resolves a Platform and replyCtx for a given session
+// key, applying the same fallbacks (single-session, multi-workspace prefix,
+// ReplyContextReconstructor) as SendToSessionWithAttachments. Returns
+// ErrNoActiveSession-style errors when no platform can be reached.
+func (e *Engine) resolvePlatformForSend(sessionKey string) (Platform, any, error) {
+	state := e.lookupInteractiveState(sessionKey)
+	if state != nil {
+		state.mu.Lock()
+		p := state.platform
+		replyCtx := state.replyCtx
+		state.mu.Unlock()
+		if p != nil {
+			return p, replyCtx, nil
+		}
+	}
+	if sessionKey == "" {
+		return nil, nil, fmt.Errorf("no active session found (key=%q)", sessionKey)
+	}
+	strippedKey := sessionKey
+	platformName := ""
+	if idx := strings.Index(strippedKey, ":"); idx > 0 {
+		platformName = strippedKey[:idx]
+	}
+	var targetPlatform Platform
+	for _, candidate := range e.platforms {
+		if candidate.Name() == platformName {
+			targetPlatform = candidate
+			break
+		}
+	}
+	if targetPlatform == nil {
+		for _, candidate := range e.platforms {
+			needle := ":" + candidate.Name() + ":"
+			if idx := strings.Index(strippedKey, needle); idx >= 0 {
+				targetPlatform = candidate
+				strippedKey = strippedKey[idx+1:]
+				break
+			}
+		}
+	}
+	if targetPlatform == nil {
+		return nil, nil, fmt.Errorf("no active session found (key=%q)", sessionKey)
+	}
+	rc, ok := targetPlatform.(ReplyContextReconstructor)
+	if !ok {
+		return nil, nil, fmt.Errorf("platform %q does not support proactive messaging", targetPlatform.Name())
+	}
+	reconstructed, err := rc.ReconstructReplyCtx(strippedKey)
+	if err != nil {
+		return nil, nil, fmt.Errorf("reconstruct reply context: %w", err)
+	}
+	return targetPlatform, reconstructed, nil
+}
+
 // sendPermissionPrompt sends a permission prompt with interactive buttons when
 // the platform supports them. Fallback chain: InlineButtonSender → CardSender → plain text.
 func (e *Engine) sendPermissionPrompt(p Platform, replyCtx any, prompt, toolName, toolInput string) {
