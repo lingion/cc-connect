@@ -247,6 +247,11 @@ type Engine struct {
 	// Default false = show all sessions.
 	filterExternalSessions bool
 
+	// Shell configuration for /shell, cron exec, hooks, webhook exec
+	shell       string // shell binary path (e.g. "sh", "/bin/zsh")
+	shellFlag   string // shell flag (e.g. "-c", "-Command", "/C")
+	shellProfile string // prepended to every command (e.g. "source ~/.zshrc;")
+
 	// Multi-workspace mode
 	multiWorkspace               bool
 	baseDir                      string
@@ -537,6 +542,8 @@ func NewEngine(name string, ag Agent, platforms []Platform, sessionStorePath str
 		maxQueuedMessages:     defaultMaxQueuedMessages,
 		showContextIndicator:  true,
 		showWorkdirIndicator:  true,
+		shell:                 defaultShell(),
+		shellFlag:             defaultShellFlag(),
 	}
 
 	if ag != nil {
@@ -636,6 +643,13 @@ func (e *Engine) reapIdleWorkspaces() {
 // SetHooks configures the lifecycle event hook manager.
 func (e *Engine) SetHooks(hm *HookManager) {
 	e.hooks = hm
+}
+
+// SetShell configures the shell binary, flag, and shell profile used for exec.
+func (e *Engine) SetShell(shell, flag, shellProfile string) {
+	e.shell = shell
+	e.shellFlag = flag
+	e.shellProfile = shellProfile
 }
 
 func (e *Engine) SetSpeechConfig(cfg SpeechCfg) {
@@ -1395,12 +1409,7 @@ func (e *Engine) executeCronShell(p Platform, replyCtx any, job *CronJob) error 
 	ctx, cancel := context.WithTimeout(e.ctx, timeout)
 	defer cancel()
 
-	var shellCmd *exec.Cmd
-	if runtime.GOOS == "windows" {
-		shellCmd = exec.CommandContext(ctx, "powershell.exe", "-NoProfile", "-ExecutionPolicy", "Bypass", "-Command", job.Exec)
-	} else {
-		shellCmd = exec.CommandContext(ctx, "sh", "-c", job.Exec)
-	}
+	shellCmd := shellExecCommand(ctx, e.shell, e.shellFlag, e.shellProfile, job.Exec)
 	shellCmd.Dir = workDir
 
 	stdout, err := shellCmd.StdoutPipe()
@@ -6616,6 +6625,35 @@ func (e *Engine) cmdShow(p Platform, msg *Message, args []string) {
 // quickFinishTimeout is how long to wait before assuming the command is long-running.
 const quickFinishTimeout = 500 * time.Millisecond
 
+// shellExecCommand builds an exec.Cmd for running command via the given shell.
+// For PowerShell/pwsh, extra flags (-NoProfile, -ExecutionPolicy Bypass) are
+// added automatically. If shellProfile is non-empty, it is prepended to the command
+// with a newline separator (useful for sourcing shell profiles).
+func shellExecCommand(ctx context.Context, shell, flag, shellProfile, command string) *exec.Cmd {
+	if shellProfile != "" {
+		command = shellProfile + "\n" + command
+	}
+	base := strings.ToLower(filepath.Base(shell))
+	if strings.HasPrefix(base, "powershell") || strings.HasPrefix(base, "pwsh") {
+		return exec.CommandContext(ctx, shell, "-NoProfile", "-ExecutionPolicy", "Bypass", flag, command)
+	}
+	return exec.CommandContext(ctx, shell, flag, command)
+}
+
+func defaultShell() string {
+	if runtime.GOOS == "windows" {
+		return "powershell.exe"
+	}
+	return "sh"
+}
+
+func defaultShellFlag() string {
+	if runtime.GOOS == "windows" {
+		return "-Command"
+	}
+	return "-c"
+}
+
 // runShellWithProgress executes a shell command with live progress feedback.
 // Strategy: start the command, wait 500ms. If it finishes within that window,
 // just send the result directly (no intermediate messages). If it's still running,
@@ -6626,12 +6664,7 @@ func (e *Engine) runShellWithProgress(p Platform, replyCtx any, command string, 
 	ctx, cancel := context.WithTimeout(e.ctx, timeout)
 	defer cancel()
 
-	var cmd *exec.Cmd
-	if runtime.GOOS == "windows" {
-		cmd = exec.CommandContext(ctx, "powershell.exe", "-NoProfile", "-ExecutionPolicy", "Bypass", "-Command", command)
-	} else {
-		cmd = exec.CommandContext(ctx, "sh", "-c", command)
-	}
+	cmd := shellExecCommand(ctx, e.shell, e.shellFlag, e.shellProfile, command)
 	cmd.Dir = workDir
 
 	stdout, err := cmd.StdoutPipe()
