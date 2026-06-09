@@ -41,10 +41,12 @@
 #
 #   [[projects]]
 #   name = "mybot"
-#   allow_from = ["*"]                       # 旧行为,临时开启
 #   [[projects.platforms]]
 #   type = "telegram"
-#   # ...
+#   [projects.platforms.options]
+#   token = "${TELEGRAM_BOT_TOKEN}"
+#   allow_from = ["*"]                       # 旧行为,临时开启,生产前改成显式列表
+#   # allow_from = ["alice", "bob", "carol"]  # 推荐的显式白名单形式
 #
 # See CHANGELOG.md "Unreleased" for the full release note.
 # 完整变更说明见 CHANGELOG.md 的 "Unreleased" 段。
