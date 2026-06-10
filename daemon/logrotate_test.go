@@ -88,7 +88,7 @@ func TestRotatingWriter_BackupRotation(t *testing.T) {
 	if err != nil {
 		t.Fatalf("NewRotatingWriter: %v", err)
 	}
-	defer w.Close()
+	defer func() { _ = w.Close() }()
 
 	chunk := strings.Repeat("x", 250) // each write forces a rotation
 	for i := 0; i < 5; i++ {
@@ -123,7 +123,7 @@ func TestRotatingWriter_BackupDisabled(t *testing.T) {
 	if err != nil {
 		t.Fatalf("NewRotatingWriter: %v", err)
 	}
-	defer w.Close()
+	defer func() { _ = w.Close() }()
 
 	chunk := strings.Repeat("y", 200)
 	for i := 0; i < 4; i++ {
@@ -152,7 +152,7 @@ func TestRotatingWriter_FallbackForInvalidMaxBackups(t *testing.T) {
 	if err != nil {
 		t.Fatalf("NewRotatingWriter: %v", err)
 	}
-	defer w.Close()
+	defer func() { _ = w.Close() }()
 	if w.MaxBackups() != DefaultLogMaxBackups {
 		t.Fatalf("MaxBackups() = %d, want %d", w.MaxBackups(), DefaultLogMaxBackups)
 	}
@@ -172,7 +172,7 @@ func TestIssue1222_BackupRetention(t *testing.T) {
 	if err != nil {
 		t.Fatalf("NewRotatingWriter: %v", err)
 	}
-	defer w.Close()
+	defer func() { _ = w.Close() }()
 
 	// Write 6 chunks, each > maxSize so each forces a rotation. With
 	// maxBackups=3 the disk should hold active + .1 + .2 + .3 and no
