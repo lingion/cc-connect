@@ -1153,3 +1153,116 @@ type = "feishu"  # or wps-xiezuo, dingtalk, telegram, slack, discord, wecom, wei
 [projects.platforms.options]
 # platform-specific options
 ```
+
+---
+
+## FAQ
+
+Quick answers to questions that came up repeatedly in issues and that the
+maintainers have resolved. Each entry links back to the originating issue
+or PR so you can dig further if needed.
+
+### Does cc-connect support OpenClaw? (issue #501)
+
+Yes. OpenClaw is supported via the [Agent Client Protocol (ACP)](https://agentclientprotocol.com/get-started/agents). cc-connect ships an `acp` agent type that talks to any ACP-compatible CLI, including OpenClaw's `openclaw acp` subcommand.
+
+Minimal config snippet (full version is in `config.example.toml` under
+`# --- Example: OpenClaw (Gateway-backed ACP bridge) ---`):
+
+```toml
+[[projects]]
+name = "openclaw-acp"
+
+[projects.agent]
+type = "acp"
+
+[projects.agent.options]
+work_dir = "/path/to/project"
+command = "openclaw"
+args = ["acp"]
+display_name = "OpenClaw ACP"
+```
+
+**Pairing is required for remote gateways.** If you point cc-connect at a
+remote OpenClaw Gateway (`args = ["acp", "--url", "wss://..."]`) you must
+pair first or every reply comes back empty:
+
+1. Start the gateway: `openclaw acp --url wss://your-gateway:18789`
+2. In another terminal: `openclaw pair`
+3. Approve the pairing request in the OpenClaw UI
+4. Now cc-connect can talk to the authorized gateway
+
+Empty responses from OpenClaw are almost always a missing pairing step
+(issue #432). Re-run `openclaw pair` and re-approve before debugging
+anything else. Reference: <https://zhuanlan.zhihu.com/p/2005687480976970296>
+
+### Personal WeChat group chat — finding the right `chat_id` (issue #805)
+
+Personal WeChat (the `weixin` platform) supports group chats. To bind the
+bot to a specific group, set `chat_id` in `[[projects.platforms.options]]`
+to the **group chat ID**, not an individual user ID. Group chat IDs always
+end with `@chatroom`, for example:
+
+```toml
+[[projects.platforms]]
+type = "weixin"
+
+[projects.platforms.options]
+token = "ilink_bot_bearer_token"
+chat_id = "your_group_chat_id@chatroom"   # group chats end with @chatroom
+```
+
+**How to find the group chat ID:**
+
+1. Start cc-connect and let the bot be in the target group.
+2. Send any message in the group from a known allowed account.
+3. Check the cc-connect logs — the incoming `chat_id` (ending in
+   `@chatroom`) is logged at the moment the message is received. Copy
+   that value into `chat_id`.
+
+Leave `chat_id` empty (or omit the key) to respond to every chat the bot
+is in. Set it to a specific value to restrict the bot to that group or
+user only.
+
+Common pitfalls:
+
+- **"How do I add the bot to a group?"** Personal WeChat bots are added
+  by scanning the QR code *inside* the group with the linked WeChat
+  account, or by sharing the QR via the personal chat and then opening
+  it inside the target group. There is no API-side "invite bot to group"
+  call; the bot becomes a group member the same way any other WeChat
+  contact does.
+- **Bot never receives group messages** — make sure the group is bound
+  to your cc-connect instance. If `allow_from` is set, the first user
+  to message in the group is recorded; if the binding is to a
+  different user, the bot stays silent.
+- **Bot replies in private but ignores the group (or vice versa)** —
+  duplicate the `[[projects.platforms]]` block, one with `chat_id` set
+  to the group and one without, to cover both surfaces.
+
+For more on the `weixin` platform, see [docs/weixin.md](./weixin.md).
+
+### Telegram proxy / outbound restrictions (issue #245)
+
+The Telegram platform supports HTTP and SOCKS5 forward proxies directly in
+`[projects.platforms.options]`. You do not need a system-wide proxy or a
+sidecar — set the proxy per Telegram instance.
+
+```toml
+[[projects.platforms]]
+type = "telegram"
+
+[projects.platforms.options]
+token = "${TELEGRAM_BOT_TOKEN}"
+proxy = "http://127.0.0.1:7890"     # or socks5://127.0.0.1:1080
+proxy_username = ""                  # leave empty if no auth
+proxy_password = ""
+```
+
+`proxy` accepts both `http://` and `socks5://` URLs. Authentication is
+optional. The proxy only affects the Telegram Bot API calls for that
+platform instance; other platforms and the management API are not
+tunneled through it.
+
+Full reference: [docs/telegram.md](./telegram.md#21-optional-use-a-proxy).
+This option was added in PR #389.

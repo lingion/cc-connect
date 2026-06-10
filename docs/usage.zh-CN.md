@@ -1066,3 +1066,108 @@ type = "feishu"  # 或 wps-xiezuo, dingtalk, telegram, slack, discord, wecom, we
 [projects.platforms.options]
 # 平台特定配置
 ```
+
+---
+
+## 常见问题（FAQ）
+
+下面这些是 issue 区里反复出现、维护者已经回答过的问题。每条都附上了
+原始 issue / PR 链接，方便继续深入。
+
+### cc-connect 是否支持 OpenClaw？(issue #501)
+
+支持。OpenClaw 通过 [Agent Client Protocol (ACP)](https://agentclientprotocol.com/get-started/agents) 接入。
+cc-connect 内置了 `acp` agent 类型，可以和任何 ACP 兼容的 CLI 通信，
+包括 OpenClaw 的 `openclaw acp` 子命令。
+
+最小配置示例（完整版见 `config.example.toml` 中 `# --- Example:
+OpenClaw (Gateway-backed ACP bridge) ---` 段）：
+
+```toml
+[[projects]]
+name = "openclaw-acp"
+
+[projects.agent]
+type = "acp"
+
+[projects.agent.options]
+work_dir = "/path/to/project"
+command = "openclaw"
+args = ["acp"]
+display_name = "OpenClaw ACP"
+```
+
+**远端 Gateway 必须先完成配对授权。** 如果你把 cc-connect 指向
+远程 OpenClaw Gateway（`args = ["acp", "--url", "wss://..."]`），
+必须先配对，否则所有回复都会是空消息：
+
+1. 启动 Gateway：`openclaw acp --url wss://your-gateway:18789`
+2. 另开终端执行：`openclaw pair`
+3. 在 OpenClaw UI 里同意配对请求
+4. 完成后 cc-connect 才能与已授权的 Gateway 通信
+
+OpenClaw 回复空消息几乎都是漏掉了配对步骤（issue #432）。在排查其他
+原因之前，先重跑 `openclaw pair` 并在 UI 中重新授权一次。
+参考：<https://zhuanlan.zhihu.com/p/2005687480976970296>
+
+### 个人微信群聊 — 如何获取正确的 `chat_id`(issue #805)
+
+个人微信（`weixin` 平台）支持群聊。要把机器人绑定到某个群，需要把
+`[[projects.platforms.options]]` 里的 `chat_id` 设置为**群聊 ID**，
+而不是个人用户 ID。群聊 ID 一定以 `@chatroom` 结尾，例如：
+
+```toml
+[[projects.platforms]]
+type = "weixin"
+
+[projects.platforms.options]
+token = "ilink_bot_bearer_token"
+chat_id = "your_group_chat_id@chatroom"   # 群聊 ID 以 @chatroom 结尾
+```
+
+**获取群聊 ID 的方法：**
+
+1. 启动 cc-connect，并让机器人加入目标群。
+2. 让群里任意已知允许的用户在群里发一条消息。
+3. 查看 cc-connect 日志，消息到达时会打印带 `@chatroom` 后缀的
+   `chat_id`。把那个值原样填到 `chat_id` 即可。
+
+把 `chat_id` 留空（或不写这个键）就表示响应机器人所在的所有聊天。
+填具体值则只响应那个群/个人。
+
+常见坑：
+
+- **「怎么把机器人加进群？」** 个人微信机器人没有"邀请机器人入群"
+  的 API；只能由已经扫码绑定 ilink 的微信号，在群里发起"添加"或把
+  机器人的二维码发到群里、让群里的人扫码添加。和把普通好友拉进群
+  一样。
+- **群里发消息机器人不响应** — 检查是否把 `chat_id` 绑到了别的用户/
+  群，或 `allow_from` 限制了别的用户，把当前用户也加入。
+- **私聊能回、群聊不回（或反之）** — 复制一份 `[[projects.platforms]]`
+  块，一份 `chat_id` 填群 ID、另一份留空，就能同时覆盖私聊和群聊。
+
+更多关于 `weixin` 平台的内容见 [docs/weixin.md](./weixin.md)。
+
+### Telegram 代理 / 出站限制 (issue #245)
+
+Telegram 平台在 `[projects.platforms.options]` 里直接支持 HTTP 和
+SOCKS5 正向代理。不需要配系统级代理或 sidecar，per Telegram 实例
+设置即可。
+
+```toml
+[[projects.platforms]]
+type = "telegram"
+
+[projects.platforms.options]
+token = "${TELEGRAM_BOT_TOKEN}"
+proxy = "http://127.0.0.1:7890"     # 或 socks5://127.0.0.1:1080
+proxy_username = ""                  # 代理无鉴权时留空
+proxy_password = ""
+```
+
+`proxy` 同时接受 `http://` 和 `socks5://` 两种 URL，鉴权可选。
+代理只作用于该 Telegram 实例的 Bot API 请求，不会影响其他平台或
+管理后台的出站。
+
+完整说明见 [docs/telegram.md](./telegram.md#21-optional-use-a-proxy)（英文原文，
+`docs/telegram.md` 目前只有英文版）。该配置由 PR #389 引入。
