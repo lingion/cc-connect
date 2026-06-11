@@ -588,8 +588,8 @@ func (e *EspeakTTS) synthesizeViaTempFile(ctx context.Context, text, voice strin
 		return nil, "", fmt.Errorf("espeak: create temp file: %w", err)
 	}
 	tmpPath := tmpFile.Name()
-	tmpFile.Close()
-	defer os.Remove(tmpPath)
+	_ = tmpFile.Close()
+	defer func() { _ = os.Remove(tmpPath) }()
 
 	args := []string{"-v", voice, "-w", tmpPath}
 	if speed > 0 {
