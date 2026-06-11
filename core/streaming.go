@@ -36,9 +36,9 @@ func StopBehaviorIsValid(v string) bool {
 type StreamPreviewCfg struct {
 	Enabled           bool     // global toggle
 	DisabledPlatforms []string // platforms where streaming preview is disabled (e.g. "feishu")
-	IntervalMs        int      // minimum ms between updates (default1500)
-	MinDeltaChars     int      // minimum new chars before sending an update (default30)
-	MaxChars          int      // max preview length (default2000)
+	IntervalMs        int      // minimum ms between updates (default 1500)
+	MinDeltaChars     int      // minimum new chars before sending an update (default 30)
+	MaxChars          int      // max preview length (default 2000)
 	StopBehavior      string   // what to do with preview on /stop: "" | "discard" (default) | "freeze"
 }
 
