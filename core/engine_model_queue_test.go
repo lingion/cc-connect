@@ -59,7 +59,7 @@ func TestModelSwitch_QueuedDuringInFlightTurn_AppliesAfterTurnComplete(t *testin
 	sess := newControllableSession("mq-inflight")
 	mqAgent := &modelQueueTestAgent{}
 	e := NewEngine("test", mqAgent, []Platform{p}, "", LangEnglish)
-	defer e.Stop()
+	defer func() { _ = e.Stop() }()
 
 	sessions := e.sessions
 	session := sessions.GetOrCreateActive("test:mq:u1")
@@ -152,7 +152,7 @@ func TestModelSwitch_NotInFlight_AppliesImmediately(t *testing.T) {
 	sess := newControllableSession("mq-noflight")
 	mqAgent := &modelQueueTestAgent{}
 	e := NewEngine("test", mqAgent, []Platform{p}, "", LangEnglish)
-	defer e.Stop()
+	defer func() { _ = e.Stop() }()
 
 	sessions := e.sessions
 	session := sessions.GetOrCreateActive("test:mq-noflight:u1")
@@ -227,7 +227,7 @@ func TestModelSwitch_TimeoutFallback_ForceAppliesAndNotices(t *testing.T) {
 	sess := newControllableSession("mq-timeout")
 	mqAgent := &modelQueueTestAgent{}
 	e := NewEngine("test", mqAgent, []Platform{p}, "", LangEnglish)
-	defer e.Stop()
+	defer func() { _ = e.Stop() }()
 
 	sessions := e.sessions
 	session := sessions.GetOrCreateActive("test:mq-timeout:u1")
