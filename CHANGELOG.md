@@ -1,5 +1,8 @@
 # Changelog
 
+### Fixed
+- **Agent bridge "bufio.Scanner: token too long"**: when an agent subprocess emitted a single newline-delimited line larger than the scanner buffer (e.g. a multi-MB MCP tool result), the bridge aborted the session with `bufio.ErrTooLong`. All line-oriented agent adapters (claudecode, codex app-server, cursor, gemini, kimi, opencode, pi, qoder) now read stdout via the shared `core.ReadLineLoop` helper, which uses `bufio.Reader.ReadBytes('\n')` with a 10MB cap. Lines over the cap are logged and dropped instead of killing the loop, so subsequent valid lines still reach the engine (#189).
+
 ### New Features
 - **`cc-connect cron add --silent`**: expose the `--silent` flag on the cron add CLI so users can suppress the cron start notification when creating a job. The server already accepted `silent` on `/cron/add`; only the CLI side was missing (#858).
 - **QQ Bot inline keyboard**: add support for inline keyboard buttons and INTERACTION_CREATE events. Permission requests now render as clickable buttons instead of text replies. Requires enabling the INTERACTION capability (bit 26) in the QQ Open Platform bot settings.
