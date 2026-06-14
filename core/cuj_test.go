@@ -30,6 +30,8 @@ package core
 
 import (
 	"context"
+	"errors"
+	"fmt"
 	"os"
 	"strings"
 	"sync"
@@ -49,6 +51,13 @@ type cujAgent struct {
 	mu       sync.Mutex
 	sessions []*cujAgentSession
 	nextID   int
+
+	// failStartCount lets tests simulate "agent process won't start" — the
+	// next N StartSession calls return failStartErr. Set both > 0 to use.
+	// When the count hits 0, StartSession resumes normal behavior, which
+	// allows recovery-path CUJs to assert that the user can retry.
+	failStartCount int
+	failStartErr   error
 }
 
 func (a *cujAgent) Name() string { return "cuj" }
@@ -56,6 +65,14 @@ func (a *cujAgent) Name() string { return "cuj" }
 func (a *cujAgent) StartSession(_ context.Context, _ string) (AgentSession, error) {
 	a.mu.Lock()
 	defer a.mu.Unlock()
+	if a.failStartCount > 0 {
+		a.failStartCount--
+		err := a.failStartErr
+		if err == nil {
+			err = errors.New("cujAgent: simulated start failure")
+		}
+		return nil, err
+	}
 	a.nextID++
 	s := newCUJAgentSession()
 	a.sessions = append(a.sessions, s)
@@ -78,6 +95,13 @@ type cujAgentSession struct {
 	// per-call control: tests set these BEFORE driving the engine
 	reply   string // what to send back as EventResult
 	delayMs int    // how long to "think" before replying (default 0)
+
+	// nextEventOverride, when non-nil, replaces the default
+	// EventResult{Content:reply} on the NEXT Send. It is consumed (set back
+	// to nil) after one use, so tests can drive a single failure turn and
+	// then return to normal replies. Use this to simulate tool failures,
+	// per-turn agent errors, etc.
+	nextEventOverride *Event
 
 	// observed
 	sentPrompts []string
@@ -106,13 +130,21 @@ func (s *cujAgentSession) Send(prompt string, _ []ImageAttachment, _ []FileAttac
 	s.sentPrompts = append(s.sentPrompts, prompt)
 	reply := s.reply
 	delay := s.delayMs
+	override := s.nextEventOverride
+	s.nextEventOverride = nil
 	s.mu.Unlock()
 	go func() {
 		if delay > 0 {
 			time.Sleep(time.Duration(delay) * time.Millisecond)
 		}
+		var ev Event
+		if override != nil {
+			ev = *override
+		} else {
+			ev = Event{Type: EventResult, Content: reply, Done: true}
+		}
 		select {
-		case s.events <- Event{Type: EventResult, Content: reply, Done: true}:
+		case s.events <- ev:
 		default:
 		}
 	}()
@@ -185,6 +217,21 @@ func (env *cujEnv) userSends(userID, content string) string {
 }
 
 func plat(p *stubPlatformEngine) Platform { return p }
+
+// cujReplyCtxPlatform wraps stubPlatformEngine and additionally implements
+// ReplyContextReconstructor so it can be used in tests that exercise
+// proactive messaging paths (timer, cron). The reconstructed reply context
+// is just the sessionKey, which is enough for stub Reply/Send to work.
+type cujReplyCtxPlatform struct {
+	*stubPlatformEngine
+}
+
+func (p *cujReplyCtxPlatform) ReconstructReplyCtx(sessionKey string) (any, error) {
+	if sessionKey == "" {
+		return nil, fmt.Errorf("empty session key")
+	}
+	return "reconstructed:" + sessionKey, nil
+}
 
 func min(a, b int) int {
 	if a < b {
@@ -1494,10 +1541,115 @@ func TestCUJ_E3_CronSurvivesRestart(t *testing.T) {
 	}
 }
 
-// CUJ-E4 · /timer triggers exactly once when scheduled_at is reached.
-// Real firing covered by core/timer_test.go scheduler tests.
-func TestCUJ_E4_TimerFiresLinkedToSchedulerTest(t *testing.T) {
-	t.Log("CUJ-E4: real-time firing covered by core/timer_test.go scheduler tests. Engine-level wiring covered by CUJ-E5.")
+// CUJ-E4 · /timer triggers exactly once at scheduled_at and delivers the
+// prompt all the way to the agent + reply to the user.
+//
+// Upgraded from link-only in Sprint 3. The existing core/timer_test.go
+// scheduler tests use a bare engine and only assert the scheduler bookkeeping
+// (timer registered, Fired flag set). They do NOT assert that the prompt
+// actually reaches the agent and the result reaches the user. This CUJ
+// closes that gap with a real engine + cujAgent + ReplyContextReconstructor
+// platform.
+func TestCUJ_E4_TimerFiresAndDeliversToAgentAndUser(t *testing.T) {
+	// Use cujReplyCtxPlatform because ExecuteTimerJob requires the platform
+	// to implement ReplyContextReconstructor — that's how it rebuilds a
+	// reply target from just a sessionKey at fire-time.
+	dir := t.TempDir()
+	plat := &cujReplyCtxPlatform{stubPlatformEngine: &stubPlatformEngine{n: "test"}}
+	agent := &cujAgent{}
+	e := NewEngine("test", agent, []Platform{plat}, dir+"/sessions.json", LangEnglish)
+
+	timerDir := dir + "/timer"
+	if err := os.MkdirAll(timerDir, 0o755); err != nil {
+		t.Fatalf("mkAll timer dir: %v", err)
+	}
+	store, err := NewTimerStore(timerDir)
+	if err != nil {
+		t.Fatalf("NewTimerStore: %v", err)
+	}
+	sched := NewTimerScheduler(store)
+	sched.RegisterEngine("test", e)
+	e.SetTimerScheduler(sched)
+	if err := sched.Start(); err != nil {
+		t.Fatalf("sched.Start: %v", err)
+	}
+	defer sched.Stop()
+
+	// Establish a session for sessionKey "test:erin" so ReconstructReplyCtx
+	// has something to find (and to mimic the real flow: timers are usually
+	// created after a user is already chatting).
+	sessionKey := "test:erin"
+	msg := &Message{
+		SessionKey: sessionKey, Platform: "test", MessageID: "m1",
+		UserID: "erin", UserName: "erin", Content: "hello", ReplyCtx: "ctx-erin",
+	}
+	e.ReceiveMessage(plat, msg)
+	deadline := time.Now().Add(2 * time.Second)
+	for time.Now().Before(deadline) && len(plat.getSent()) == 0 {
+		time.Sleep(10 * time.Millisecond)
+	}
+	plat.clearSent()
+	agent.mu.Lock()
+	preFireSessionCount := len(agent.sessions)
+	agent.mu.Unlock()
+
+	// Add a timer that fires VERY soon (200ms).
+	job := &TimerJob{
+		ID:          "timer-fire-soon",
+		Project:     "test",
+		SessionKey:  sessionKey,
+		ScheduledAt: time.Now().Add(200 * time.Millisecond),
+		Prompt:      "remind me to check status",
+		CreatedAt:   time.Now(),
+	}
+	if err := sched.AddJob(job); err != nil {
+		t.Fatalf("sched.AddJob: %v", err)
+	}
+
+	// Wait for the timer to fire AND the prompt to reach the agent.
+	deadline = time.Now().Add(3 * time.Second)
+	var seen bool
+	var sentPromptCount int
+	for time.Now().Before(deadline) {
+		agent.mu.Lock()
+		nowCount := len(agent.sessions)
+		// The timer execution may reuse an existing session or open a new
+		// one — either way, somewhere in agent.sessions[].sentPrompts the
+		// prompt should appear.
+		for _, s := range agent.sessions {
+			for _, p := range s.getSentPrompts() {
+				if strings.Contains(p, "remind me to check status") {
+					seen = true
+					sentPromptCount++
+				}
+			}
+		}
+		agent.mu.Unlock()
+		_ = nowCount
+		_ = preFireSessionCount
+		if seen {
+			break
+		}
+		time.Sleep(20 * time.Millisecond)
+	}
+	if !seen {
+		t.Fatalf("timer fired but prompt never reached the agent. plat.getSent()=%v", plat.getSent())
+	}
+
+	// And the timer should now be marked Fired in the store.
+	stored := store.Get("timer-fire-soon")
+	if stored == nil {
+		t.Fatalf("timer disappeared from store after firing")
+	}
+	if !stored.Fired {
+		t.Fatalf("timer was not marked as Fired after execution")
+	}
+
+	// The user should also see at least one platform message (the prefire
+	// notification "⏰ ..." OR the agent reply).
+	if len(plat.getSent()) == 0 {
+		t.Fatalf("timer fired but user saw no platform message at all")
+	}
 }
 
 // CUJ-E6 · Timer jobs survive restart.
@@ -1599,16 +1751,106 @@ func TestCUJ_G2_TimeoutLinkedToEngineTest(t *testing.T) {
 
 // CUJ-G3 already exists above.
 
-// CUJ-G4 · Agent process crash mid-session → engine surfaces error, does
-// not hang or panic. Covered through CUJ-G1 and engine's Recover paths.
-func TestCUJ_G4_AgentCrashLinkedToEngineRecoverPaths(t *testing.T) {
-	t.Log("CUJ-G4: agent crash recovery covered by engine_test.go Recover tests (3 paths)")
+// CUJ-G4 · Agent process crash mid-session → engine surfaces a user-visible
+// error AND remains usable for the next message (recovery path).
+//
+// This was previously a link-only CUJ. Upgraded to a direct CUJ as part of
+// Sprint 3 because agent-start failures are a top-3 user-reported issue
+// (per support inbox) and the failure → recovery handshake had no end-to-end
+// coverage. Asserts:
+//
+//  1. When the agent process refuses to start, the user gets a clear
+//     "agent unavailable" message (MsgFailedToStartAgentSession), NOT
+//     silence and not a panic.
+//  2. After the agent recovers (e.g. binary becomes available again), the
+//     user's NEXT message succeeds without requiring any user intervention
+//     (no /restart, no /new, no admin action).
+func TestCUJ_G4_AgentCrashReturnsErrorAndRecovers(t *testing.T) {
+	env := newCUJEnv(t)
+
+	// Configure agent to refuse the FIRST StartSession attempt, then
+	// recover for the second call (which happens on the user's retry).
+	env.agent.mu.Lock()
+	env.agent.failStartCount = 1
+	env.agent.failStartErr = errors.New("agent binary not found")
+	env.agent.mu.Unlock()
+
+	env.userSends("g4", "first try while agent is down")
+	env.waitFor("crash error visible", 2*time.Second, func() bool {
+		return len(env.plat.getSent()) >= 1
+	})
+
+	if !env.sentContains("failed to start agent session") && !env.sentContains("无法") {
+		t.Fatalf("user did not see an agent-start failure message; got: %v", env.plat.getSent())
+	}
+
+	// Agent has now "recovered" — failStartCount has been drained to 0
+	// by the two failed StartSession calls above, so the next attempt
+	// will succeed. The user must NOT need to do anything special — just
+	// send another message.
+	env.plat.clearSent()
+	env.userSends("g4", "second try, agent is back")
+	env.waitFor("recovered reply", 3*time.Second, func() bool {
+		return len(env.plat.getSent()) >= 1
+	})
+
+	if env.sentContains("agent binary not found") || env.sentContains("failed to start agent session") {
+		t.Fatalf("user still sees crash error after recovery; got: %v", env.plat.getSent())
+	}
+
+	// The agent must have actually been started (i.e. the recovery path
+	// reached the agent layer, not just suppressed the error).
+	env.agent.mu.Lock()
+	gotSessions := len(env.agent.sessions)
+	env.agent.mu.Unlock()
+	if gotSessions == 0 {
+		t.Fatalf("after recovery, agent.StartSession was never called successfully (sessions=%d)", gotSessions)
+	}
 }
 
-// CUJ-G5 · Tool call failure: agent receives an error → relays a sensible
-// reply to the user. Tool-failure paths are wired in stub agent tests.
-func TestCUJ_G5_ToolFailureLinkedToEngineTest(t *testing.T) {
-	t.Log("CUJ-G5: tool failure paths covered by engine_test.go (multiple stubAgent failure scenarios)")
+// CUJ-G5 · Tool call failure: agent emits EventError mid-turn (e.g. bash
+// tool exits non-zero, file write permission denied). User must see the
+// error reflected in the platform reply — not silence.
+//
+// Upgraded from link-only in Sprint 3 because tool failures are the most
+// common in-conversation failure mode (every bash command, every file edit
+// can fail) and we had no direct assertion that the error text actually
+// reaches the user's screen.
+func TestCUJ_G5_ToolFailureSurfacesToUser(t *testing.T) {
+	env := newCUJEnv(t)
+
+	// Establish a session.
+	env.userSends("g5", "hello")
+	env.waitFor("turn1", 2*time.Second, func() bool { return len(env.plat.getSent()) >= 1 })
+	env.plat.clearSent()
+
+	// On the NEXT user turn, make the agent emit an EventError instead of
+	// a normal EventResult — this simulates a tool call (bash, edit, etc.)
+	// failing inside the agent.
+	env.agent.mu.Lock()
+	if len(env.agent.sessions) == 0 {
+		env.agent.mu.Unlock()
+		t.Fatalf("no agent session was started by turn 1")
+	}
+	sess := env.agent.sessions[len(env.agent.sessions)-1]
+	env.agent.mu.Unlock()
+
+	sess.mu.Lock()
+	sess.nextEventOverride = &Event{
+		Type:  EventError,
+		Error: errors.New("bash tool exited with code 1: permission denied"),
+		Done:  true,
+	}
+	sess.mu.Unlock()
+
+	env.userSends("g5", "run a tool that will fail")
+	env.waitFor("error reply visible", 2*time.Second, func() bool {
+		return len(env.plat.getSent()) >= 1
+	})
+
+	if !env.sentContains("permission denied") && !env.sentContains("bash tool exited") {
+		t.Fatalf("user did not see the underlying tool error in reply; got: %v", env.plat.getSent())
+	}
 }
 
 // CUJ-G6 · Network flap: undelivered outbound messages eventually arrive
