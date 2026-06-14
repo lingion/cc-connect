@@ -29,6 +29,26 @@ const maxPlatformMessageLen = 4000
 const telegramBotCommandLimit = 100
 const defaultMaxQueuedMessages = 5 // default cap for queued messages per session
 
+// previewText truncates s to maxRunes runes for safe inclusion in debug logs.
+// Truncation uses runes (not bytes) so multi-byte characters render cleanly.
+// Newlines are replaced with literal "\n" to keep each log entry on one line.
+func previewText(s string, maxRunes int) string {
+	if maxRunes <= 0 {
+		return ""
+	}
+	r := []rune(s)
+	truncated := false
+	if len(r) > maxRunes {
+		r = r[:maxRunes]
+		truncated = true
+	}
+	out := strings.ReplaceAll(string(r), "\n", "\\n")
+	if truncated {
+		out += "...(truncated)"
+	}
+	return out
+}
+
 const (
 	defaultThinkingMaxLen = 300
 	defaultToolMaxLen     = 500
@@ -2482,6 +2502,15 @@ func (e *Engine) handleMessage(p Platform, msg *Message) {
 		"content_len", len(msg.Content),
 		"has_images", len(msg.Images) > 0, "has_audio", msg.Audio != nil, "has_files", len(msg.Files) > 0,
 	)
+	// DEBUG: full message content for in-depth debugging (release-gate testing).
+	// Gated behind DEBUG level so production INFO logs don't leak user text.
+	if slog.Default().Enabled(e.ctx, slog.LevelDebug) {
+		slog.Debug("message content",
+			"platform", msg.Platform, "msg_id", msg.MessageID,
+			"session", msg.SessionKey, "user", msg.UserName,
+			"content", previewText(msg.Content, 500),
+		)
+	}
 
 	e.hooks.Emit(HookEvent{
 		Event:      HookEventMessageReceived,
@@ -3213,6 +3242,10 @@ func (e *Engine) processInteractiveMessageWith(p Platform, msg *Message, session
 
 	e.i18n.DetectAndSet(msg.Content)
 	session.AddHistory("user", msg.Content)
+	// Persist user message immediately so crashes between user input and
+	// assistant reply don't lose it (the assistant-side Save below depends
+	// on the turn completing without a process crash).
+	sessions.Save()
 
 	// Use the agent override when available (multi-workspace mode)
 	var agentOverride Agent
@@ -4958,6 +4991,15 @@ func (e *Engine) processInteractiveEvents(state *interactiveState, session *Sess
 				"output_tokens", event.OutputTokens,
 				"silent", isSilent,
 			)
+			// DEBUG: full assistant response for in-depth debugging.
+			if slog.Default().Enabled(e.ctx, slog.LevelDebug) {
+				slog.Debug("turn response",
+					"session", session.ID,
+					"agent_session", session.GetAgentSessionID(),
+					"history_len", session.HistoryLen(),
+					"response", previewText(fullResponse, 500),
+				)
+			}
 
 			e.noteUserTurnCompleted(state)
 
@@ -5261,6 +5303,9 @@ func (e *Engine) processInteractiveEvents(state *interactiveState, session *Sess
 				}
 
 				session.AddHistory("user", queued.content)
+				// Persist queued user message immediately (mirror of the
+				// initial AddHistory("user",...) save above).
+				sessions.Save()
 
 				if idleTimer != nil {
 					if !idleTimer.Stop() {
@@ -5354,6 +5399,10 @@ channelClosed:
 
 		fullResponse := strings.Join(textParts, "")
 		session.AddHistory("assistant", fullResponse)
+		// Persist immediately — this path runs on abnormal channel close,
+		// so deferring the save until the next foreground turn risks losing
+		// the partial assistant response if the process exits next.
+		sessions.Save()
 
 		// Respect NO_REPLY even on abnormal exit so silent turns stay silent.
 		if isSilentReply(fullResponse) {
@@ -6285,8 +6334,13 @@ func (e *Engine) cmdSwitch(p Platform, msg *Message, args []string) {
 	e.cleanupInteractiveState(interactiveKey)
 	slog.Info("cmdSwitch: cleanup done", "session_key", msg.SessionKey)
 
-	session := sessions.SwitchToAgentSession(msg.SessionKey, matched.ID, agent.Name(), matched.Summary)
-	session.ClearHistory()
+	// NOTE: Do NOT call session.ClearHistory() on the returned Session.
+	// When switching back to a known agent_session_id, SwitchToAgentSession
+	// returns the *existing* Session object whose History reflects the
+	// original conversation; wiping it makes /history return empty after a
+	// /switch round-trip. When SwitchToAgentSession creates a fresh Session
+	// (no prior match), History is already nil, so preserving is a no-op.
+	_ = sessions.SwitchToAgentSession(msg.SessionKey, matched.ID, agent.Name(), matched.Summary)
 
 	shortID := matched.ID
 	if len(shortID) > 12 {
