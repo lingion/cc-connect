@@ -987,7 +987,9 @@ func TestSendWPSMessage_NewlinesConvertedToHardBreaks(t *testing.T) {
 	var gotBody []byte
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path == "/oauth2/token" {
-			json.NewEncoder(w).Encode(tokenResponse{AccessToken: "tok", ExpiresIn: 7200})
+			if err := json.NewEncoder(w).Encode(tokenResponse{AccessToken: "tok", ExpiresIn: 7200}); err != nil {
+				t.Errorf("encode token response: %v", err)
+			}
 			return
 		}
 		if r.URL.Path == "/v7/messages/create" {
