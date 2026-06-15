@@ -802,18 +802,23 @@ func (p *Platform) sendWPSMessage(ctx context.Context, rctx any, content string)
 		content = cleanReplyContent(content)
 	}
 
-	// WPS Open Platform v7 messages API renders message content as markdown
-	// when Content.Text.Type == "markdown" AND the outer message Type is
-	// "markdown" (the outer field gates the rendering pipeline; a "text"
-	// outer collapses everything to plain text with all newlines flattened
-	// into spaces).
+	// WPS Open Platform v7 messages API: outer message `type` MUST be one of
+	// the API-defined message-type enums (text / rich_text / image / file /
+	// audio / video / card) — passing "markdown" makes the API reject the
+	// request with `400000002 invalid open_v7_message_type: "markdown"`.
 	//
-	// Once we are in markdown mode, single "\n" is still collapsed into a
-	// space per CommonMark; the official WPS docs require either "two spaces
-	// + \n" or "\n\n" for a real line break. We use the trailing-spaces form
-	// so we preserve paragraph structure (no extra blank lines) and stay
-	// safe inside fenced code blocks (the two extra spaces at end of line
-	// are harmless inside ``` blocks where whitespace is preserved as-is).
+	// Markdown rendering is opted into via the INNER `Content.Text.Type =
+	// "markdown"` field (the only other inner enum is "plain"). When the
+	// inner field is "markdown" WPS renders the content with a CommonMark
+	// subset, and CommonMark collapses a single "\n" between non-empty
+	// lines into a space. To force a real line break we must emit either
+	// "  \n" (two trailing spaces) or "\n\n" — see the official docs at
+	// https://open.wps.cn/documents/app-integration-dev/guide/robot/webhook
+	//
+	// We use the trailing-spaces form so we preserve paragraph structure
+	// (no spurious blank lines) and stay safe inside fenced code blocks
+	// (the two extra trailing whitespace characters inside ``` blocks are
+	// preserved verbatim but visually invisible).
 	content = applyWPSLineBreaks(content)
 
 	token, err := p.getToken(ctx)
@@ -822,7 +827,7 @@ func (p *Platform) sendWPSMessage(ctx context.Context, rctx any, content string)
 	}
 
 	reqBody := sendMessageRequest{
-		Type: "markdown",
+		Type: "text",
 		Receiver: receiverInfo{
 			Type:       "chat",
 			ReceiverID: rc.ChatID,

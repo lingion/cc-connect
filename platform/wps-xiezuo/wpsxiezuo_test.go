@@ -967,12 +967,13 @@ func TestSendWPSMessage_Success(t *testing.T) {
 	if req.Content.Text.Type != "markdown" {
 		t.Fatalf("expected markdown type, got %s", req.Content.Text.Type)
 	}
-	// Regression guard: WPS API requires the outer message type to be
-	// "markdown" (matching Content.Text.Type) for the markdown renderer to
-	// kick in. With outer "text", everything (including newlines) gets
-	// flattened to a single-line plain text.
-	if req.Type != "markdown" {
-		t.Fatalf("expected outer message type=markdown, got %q", req.Type)
+	// Regression guard: WPS v7 messages API outer Type is a strict enum
+	// (text / rich_text / image / file / audio / video / card). Sending
+	// "markdown" makes the API reject with 400000002. The inner
+	// Content.Text.Type field is what opts into markdown rendering; outer
+	// must remain "text".
+	if req.Type != "text" {
+		t.Fatalf("expected outer message type=text (markdown opt-in is via inner Content.Text.Type), got %q", req.Type)
 	}
 }
 
