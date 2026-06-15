@@ -277,7 +277,9 @@ func TestMiniMaxTTS_FinalStatusChunkAudioIsDropped(t *testing.T) {
 				"base_resp": map[string]any{"status_code": 0, "status_msg": "success"},
 			}
 			data, _ := json.Marshal(chunk)
-			fmt.Fprintf(w, "data:%s\n\n", data)
+			if _, err := fmt.Fprintf(w, "data:%s\n\n", data); err != nil {
+				t.Errorf("write chunk: %v", err)
+			}
 		}
 		// Final status=2 chunk re-sends the full "hello" audio as trailer.
 		final := map[string]any{
@@ -285,7 +287,9 @@ func TestMiniMaxTTS_FinalStatusChunkAudioIsDropped(t *testing.T) {
 			"base_resp": map[string]any{"status_code": 0, "status_msg": "success"},
 		}
 		finalData, _ := json.Marshal(final)
-		fmt.Fprintf(w, "data:%s\n\n", finalData)
+		if _, err := fmt.Fprintf(w, "data:%s\n\n", finalData); err != nil {
+			t.Errorf("write final: %v", err)
+		}
 	}))
 	defer apiServer.Close()
 
@@ -312,21 +316,27 @@ func TestMiniMaxTTS_StopsAfterFinalStatusChunk(t *testing.T) {
 			"base_resp": map[string]any{"status_code": 0, "status_msg": "success"},
 		}
 		data, _ := json.Marshal(chunk)
-		fmt.Fprintf(w, "data:%s\n\n", data)
+		if _, err := fmt.Fprintf(w, "data:%s\n\n", data); err != nil {
+			t.Errorf("write chunk: %v", err)
+		}
 		// status=2 trailer with full audio
 		final := map[string]any{
 			"data":      map[string]any{"audio": "6869", "status": 2},
 			"base_resp": map[string]any{"status_code": 0, "status_msg": "success"},
 		}
 		finalData, _ := json.Marshal(final)
-		fmt.Fprintf(w, "data:%s\n\n", finalData)
+		if _, err := fmt.Fprintf(w, "data:%s\n\n", finalData); err != nil {
+			t.Errorf("write final: %v", err)
+		}
 		// Bogus extra chunk after final — must be ignored.
 		extra := map[string]any{
 			"data":      map[string]any{"audio": "deadbeef", "status": 1},
 			"base_resp": map[string]any{"status_code": 0, "status_msg": "success"},
 		}
 		extraData, _ := json.Marshal(extra)
-		fmt.Fprintf(w, "data:%s\n\n", extraData)
+		if _, err := fmt.Fprintf(w, "data:%s\n\n", extraData); err != nil {
+			t.Errorf("write extra: %v", err)
+		}
 	}))
 	defer apiServer.Close()
 
