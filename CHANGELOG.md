@@ -1,5 +1,13 @@
 # Changelog
 
+## Unreleased
+
+### Fixed
+- **/model switch confirmation copy**: `MsgModelChanged` now explicitly states the
+  new model applies to the current session and all future sessions, removing the
+  misleading "new sessions" wording that made users think they needed `/new` to
+  see the change take effect (#1368).
+
 ## v1.3.3 (2026-06-15)
 
 First stable release of the 1.3.3 series. Stabilizes the v1.3.3-beta.1 → v1.3.3-beta.5
