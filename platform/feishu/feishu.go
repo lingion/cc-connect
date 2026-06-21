@@ -6012,7 +6012,7 @@ func buildRichCardJSONBytes(status core.CardStatus, steps []core.ToolStep, markd
 				"tag":        "markdown",
 				"content":    sanitizeCardMarkdownForCard(line),
 				"text_size":  "notation",
-				"text_color": "grey",
+
 			})
 		}
 	}
