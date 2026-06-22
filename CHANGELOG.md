@@ -33,6 +33,7 @@ See `changelogs/v1.4.0-beta.1.md` for the full themed summary with credits.
 - **runas workspace**: run the agent in its own workspace under `run_as_user` (#1315).
 - **claudecode mid-turn compaction**: keep the turn running when a compaction event arrives mid-turn (fixes #481) (#1272).
 - **cron permission lookup with composite keys**: pending permission lookup for cron sessions now resolves correctly when the key is composite (#1067).
+- **core (post-restart notification race)**: queue the `/restart` success notification on the engine and dispatch it when the target platform reaches `OnPlatformReady` (with bounded retry + 10s safety timeout) instead of firing immediately after engine startup. Closes the race where notifications were silently dropped on platforms with async connect (Telegram: ~2.6s). Covers Discord / Weixin / Matrix for free (#1388 closing #1383).
 
 ### Tests
 - Regression test for issue #814 — verifies queued messages use their own `replyCtx` via the outer drain (#1261).
