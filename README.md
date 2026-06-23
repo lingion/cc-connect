@@ -88,8 +88,8 @@ MiniMax-M3 pushes the frontier of coding and agentic AI, with a 1M-token context
 </tr>
 
 <tr>
-<td width="150"><a href="https://unity2.ai/"><img src="assets/sponsors/unity2ai.png" alt="Unity2.ai" width="120"></a></td>
-<td>Thanks to Unity2.ai for sponsoring this project! Unity2.ai is a high-performance AI model API relay platform for individual developers, teams, and enterprises. Long-term service for top domestic enterprises, daily traffic exceeding 30 billion tokens, supporting up to 5000 RPM high concurrency. Offers balance billing, first-top-up bonus, combo subscriptions, enterprise invoicing, and dedicated integration. Register via <a href="https://unity2.ai/">this link</a> to claim $2 credit, join the official group for an additional $10 credit — up to $12 in free credits!</td>
+<td width="150"><a href="https://unity2.ai/register?source=ccconnect"><img src="assets/sponsors/unity2ai.png" alt="Unity2.ai" width="120"></a></td>
+<td>Thanks to Unity2.ai for sponsoring this project! Unity2.ai is a high-performance AI model API relay platform for individual developers, teams, and enterprises. Long-term service for top domestic enterprises, daily traffic exceeding 30 billion tokens, supporting up to 5000 RPM high concurrency. Offers balance billing, first-top-up bonus, combo subscriptions, enterprise invoicing, and dedicated integration. Register via <a href="https://unity2.ai/register?source=ccconnect">this link</a> to claim $2 credit, join the official group for an additional $10 credit — up to $12 in free credits!</td>
 </tr>
 
 <tr>
