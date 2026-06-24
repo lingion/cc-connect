@@ -1,4 +1,9 @@
-# Changelog
+﻿# Changelog
+
+## Unreleased
+
+### Added
+- **Reasonix agent**: new agent adapter for Reasonix multi-model coding agent, bridging via HTTP serve API (POST /submit, SSE /events, POST /approve). Supports default/yolo/plan permission modes, SSE auto-reconnect with backoff, and thinking accumulator. (#1281)
 
 ## Unreleased
 
