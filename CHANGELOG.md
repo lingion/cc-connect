@@ -1,5 +1,16 @@
 # Changelog
 
+## v1.4.1 (2026-06-28)
+
+Patch release focused on Kimi CLI compatibility for users on the newer `kimi-code` 0.14.x (which removed the `--print` flag). v1.4.1 probes the Kimi CLI at startup and conditionally passes `--print` only when the installed binary supports it. Older `kimi-cli` 1.48.x users keep working as-is — no config change required either way.
+
+This is the first release under the post-v1.4.0 SOP correction: every commit since v1.4.0 (in this case #1461) was put through a fresh manual QA cycle by cc-connect/qa-cursor before stable promotion, including owner-paired smoke testing on the actual binary against both Kimi CLI versions.
+
+See `changelogs/v1.4.1.md` for the full details with credits.
+
+### Fixed
+- **Kimi CLI `--print` compatibility** (#1461 fixing #1456, @chenhg5, reported by @WeiFengJL): newer `kimi-code` 0.14.x removed the `--print` flag, causing `error: unknown option '--print' (Did you mean --prompt?)` on agent startup. cc-connect now probes the Kimi CLI `--help` output and conditionally passes `--print` only when supported. Verified against `kimi-code` 0.14.2 (Print=false) and `kimi-cli` 1.48.0 (Print=true) on real binaries.
+
 ## v1.4.0 (2026-06-28)
 
 Stable release of the v1.4.0 series. **Two new platforms join the family** (Cisco Webex, Matrix with E2EE), broader configurability across agents and platforms, Korean i18n, and a long list of fixes — including last-minute critical fixes for a `Send` goroutine race (#1436), a Feishu recall-probe quota burn (#1321), and a `run_as_user` EACCES regression (#1433).
