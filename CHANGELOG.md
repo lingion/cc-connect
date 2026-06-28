@@ -2,12 +2,14 @@
 
 ## v1.4.0-beta.3 (2026-06-28)
 
-Rolling beta with 3 additional commits on top of beta.2: one critical regression fix + two low-risk additions.
+Rolling beta with 3 additional commits on top of beta.2: one critical regression fix + two low-risk additions. Two additional critical fixes were cherry-picked on top of beta.3 ahead of the v1.4.0 stable cut.
 
 See `changelogs/v1.4.0-beta.3.md` for the full themed summary with credits.
 
 ### Fixed
 - **🚨 claudecode `run_as_user` EACCES regression**: chmod `0o644` on per-spawn system-prompt temp file so non-root child processes can read it. Regression introduced by v1.3.4 (#1376) — `run_as_user` users on v1.4.0-beta.1/beta.2 were 100% blocked at agent startup. Reported by @vuyiv (#1429), fixed by @chenhg5 (#1433).
+- **🚨 core Send goroutine nil-pointer panic race**: capture `state.agentSession` under `state.mu` before launching `Send` goroutines and add a nil-check fallback inside each goroutine. `cleanupInteractiveState` nils `agentSession` while three `Send` goroutines previously read it without holding the lock; when an agent process exited just before its `Send` was scheduled, the whole cc-connect process would panic and drop every platform connection (#1436, @gotang; follow-up alignment of the third call site in `drainPendingMessages` by @qa-cursor).
+- **🚨 Feishu recall-probe quota burn**: throttle the `MessageRecallDetector` fallback path — was polling `GET /im/v1/messages/{message_id}` every 2 s for the same active message, burning ~1.3M Feishu OpenAPI calls/month per stuck session and exhausting the 1M/month free quota. Probe interval now 1 minute, per-message dedup + in-flight guard inside `interactiveState`. Reset on each new active message so recall detection still works for normal turns (#1321, @qvictl).
 
 ### Features
 - **Zhipu GLM provider presets**: add `z.ai` and `bigmodel` (CN) preset entries to `provider-presets.json` (#1412, @clingnet).
