@@ -1,5 +1,20 @@
 # Changelog
 
+## v1.4.0-beta.3 (2026-06-28)
+
+Rolling beta with 3 additional commits on top of beta.2: one critical regression fix + two low-risk additions.
+
+See `changelogs/v1.4.0-beta.3.md` for the full themed summary with credits.
+
+### Fixed
+- **🚨 claudecode `run_as_user` EACCES regression**: chmod `0o644` on per-spawn system-prompt temp file so non-root child processes can read it. Regression introduced by v1.3.4 (#1376) — `run_as_user` users on v1.4.0-beta.1/beta.2 were 100% blocked at agent startup. Reported by @vuyiv (#1429), fixed by @chenhg5 (#1433).
+
+### Features
+- **Zhipu GLM provider presets**: add `z.ai` and `bigmodel` (CN) preset entries to `provider-presets.json` (#1412, @clingnet).
+
+### Chore
+- `.gitignore`: add `.worktrees/` for local-only multi-agent scratch dirs (#1443, @chenhg5). Local-only, does not affect binary.
+
 ## v1.4.0-beta.2 (2026-06-23)
 
 Rolling beta with 10 additional commits on top of beta.1: 3 QA-found hotfixes + 7 cherry-picked PRs from main. QA has verified all changes.
