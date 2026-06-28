@@ -161,25 +161,28 @@ MiniMax-M3 pushes the frontier of coding and agentic AI, with a 1M-token context
 </p>
 
 
-## 🆕 What’s New in v1.4.0-beta.1
+## 🆕 What's New in v1.4.0
 
-First beta of the v1.4.0 series — 22 PRs since v1.3.4, with **two new platforms** joining the family. Also rolls in the v1.3.4 Windows-cmdline hotfix via PR #1378.
+Stable release of the v1.4.0 series — **two new platforms join the family** (Cisco Webex, Matrix with E2EE), broader configurability across agents and platforms, Korean i18n, and a long list of fixes including three critical post-beta cherry-picks for a Send-goroutine race, a Feishu recall-probe quota burn, and a `run_as_user` EACCES regression.
 
-- **New platforms** — **Cisco Webex** first-class adapter (#1402, @bryantbarzola); **Matrix with E2EE** end-to-end-encrypted room support (#834, @rablwupei). cc-connect now ships 15 chat platforms.
+- 🚨 **Critical fixes shipped late** — Send-goroutine nil-pointer race that crashed the whole cc-connect process (#1436, @gotang); Feishu `MessageRecallDetector` burning ~1.3M OpenAPI calls/month per stuck session (#1321, @qvictl); `run_as_user` EACCES regression introduced by v1.3.4 (#1433, @chenhg5; reported by @vuyiv #1429).
+- **New platforms** — **Cisco Webex** first-class adapter (#1402, @bryantbarzola); **Matrix with E2EE** end-to-end-encrypted room support (#834). cc-connect now ships 15 chat platforms.
+- **Agent option parsing refactor** — unified `cmd` field across all agent adapters; `cli_path` is deprecated (still works with a warning) (#1297, @happyTonakai).
 - **Slack streaming + aggregated turn card** — live streaming preview while the agent is thinking, collapses into a single turn card on completion (#1333).
-- **Feishu rich card upgrades** — `after_click` card replacement for `cmd:` action handlers (#1299); batch images dispatched as one multi-image message so the first image of N is no longer dropped (#1408 carrying #1395).
-- **Codex per-config prompts** — `system_prompt` / `append_system_prompt` now honoured for the codex agent, matching claudecode (#1345).
-- **Korean (ko) i18n** — Web admin UI now ships Korean alongside zh / en / ja (#1343).
+- **Feishu rich card upgrades** — `after_click` card replacement for `cmd:` action handlers (#1299); batch images dispatched as one multi-image message (default coalesce window now 500 ms) so the first image of N is no longer dropped (#1408 carrying #1395).
+- **Codex per-config prompts + `model_catalog_json`** — `system_prompt` / `append_system_prompt` now honoured for the codex agent (#1345); Codex's own `model_catalog_json` is preferred as highest-priority model source (#1074, @happyTonakai).
+- **Zhipu GLM provider presets** — `z.ai` and `bigmodel` (CN) endpoint entries added (#1412, @clingnet).
+- **Korean (ko) i18n** — Web admin UI now ships Korean alongside zh / en / ja (#1343); `nav.cron` also localised for ko/ja/es.
 - **Claude Code plugins via `plugin_dir`** — load Claude Code plugins by pointing at a directory (#1325).
-- **Operational knobs** — `max_attachment_size_mb` for `cc-connect send` outbound size cap (#1392); `CC_LOG_MAX_BACKUPS` env var for daemon log rotation (#1260).
+- **Operational knobs** — `cc-connect send --cwd` workdir support (#1380, @MMMarcinho); `max_attachment_size_mb` for `cc-connect send` outbound size cap (#1392, @rablwupei); `CC_LOG_MAX_BACKUPS` env var for daemon log rotation (#1260); configurable `/history` truncation (#1291, @AaronZ345).
 - **acp graceful `/stop`** — new `AgentSessionCanceller` interface lets ACP agents stop cleanly (#1275).
-- **Reliability fixes** — workspace model persistence (#1372); core queued messages drain strictly FIFO so older queued items are no longer dropped as stale (#1286); workspace binding + run_as_user fixes (#1315, #1316); claudecode mid-turn compaction keeps the turn alive (#1272); cron permission lookup with composite keys (#1067).
+- **Reliability fixes** — workspace model persistence (#1372); core queued messages drain strictly FIFO (#1286); workspace binding + run_as_user fixes (#1315, #1316, #1433); claudecode mid-turn compaction keeps the turn alive (#1272); claudecode tool output reaches progress card via `EventToolResult` (#1407, @coolrockin); DingTalk stream loop panic recovery (#1390, reported by @gd0094); `/restart` notification queued and dispatched on platform ready (#1388 closing #1383); cron permission lookup with composite keys (#1067).
 - **Skill discovery hardened** — only depth-1 `SKILL.md` is registered; nested SKILL.md files are treated as assets, fixing 101 phantom slash-commands from `frontend-design` skill (#1317 carrying #1304).
 - **Windows cmdline hotfix on main** — v1.3.4's `--append-system-prompt-file` fix is now on main via #1378. Windows + claudecode users are unblocked here without needing the v1.3.4 hotfix branch.
 
-⚠️ **Behavior changes**: None. All new config options are optional with safe defaults. Existing v1.3.4 configs upgrade as-is.
+⚠️ **Upgrade notes**: `cli_path` is deprecated in favour of `cmd` (existing configs keep working). Feishu `imageBatchWindow` default changed from 150 ms → 500 ms. Feishu `MessageRecallDetector` fallback probe interval changed from 2 s → 60 s. Override in config if you preferred the old values.
 
-Full themed summary with credits: `changelogs/v1.4.0-beta.1.md`. The v1.3.4 Windows hotfix is documented in `changelogs/v1.3.4.md`.
+Full themed summary with credits: `changelogs/v1.4.0.md`. Per-beta detail: `changelogs/v1.4.0-beta.1.md`, `v1.4.0-beta.2.md`, `v1.4.0-beta.3.md`. The v1.3.4 Windows hotfix is documented in `changelogs/v1.3.4.md`.
 
 
 ## 🧩 Platform feature snapshot

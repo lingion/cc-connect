@@ -1,5 +1,34 @@
 # Changelog
 
+## v1.4.0 (2026-06-28)
+
+Stable release of the v1.4.0 series. **Two new platforms join the family** (Cisco Webex, Matrix with E2EE), broader configurability across agents and platforms, Korean i18n, and a long list of fixes — including last-minute critical fixes for a `Send` goroutine race (#1436), a Feishu recall-probe quota burn (#1321), and a `run_as_user` EACCES regression (#1433).
+
+This stable rolls up everything from v1.4.0-beta.1 → beta.2 → beta.3 plus the 3 post-beta.3 cherry-picks (#1436, #1321 and a `drainPendingMessages` follow-up alignment).
+
+See `changelogs/v1.4.0.md` for the full themed summary with credits.
+
+### 🚨 Critical fixes shipped late in the cycle
+- **core Send-goroutine nil-pointer panic race** (#1436, @gotang; follow-up alignment of the third call site in `drainPendingMessages`): would crash the whole cc-connect process and drop every platform connection when an agent process exited just before a `Send` goroutine was scheduled. 100% reproducible in production.
+- **Feishu recall-probe quota burn** (#1321, @qvictl): `MessageRecallDetector` fallback path was polling every 2s, burning ~1.3M Feishu OpenAPI calls/month per stuck session and exhausting the 1M free quota. Probe interval now 1 minute with per-message dedup + in-flight guard.
+- **claudecode `run_as_user` EACCES regression** (#1433, @chenhg5; reported by @vuyiv #1429): chmod `0o644` on per-spawn system-prompt temp file so non-root child processes can read it. Fixes a regression introduced by v1.3.4 (#1376) — `run_as_user` users on beta.1/beta.2 were 100% blocked at agent startup.
+
+### v1.4.0 cycle highlights
+- **Cisco Webex** and **Matrix (with E2EE)** as new first-class platforms (#1402, #834).
+- **agent option parsing refactor**: centralize cmd/env option parsing into core with unified `cmd` field across all agent adapters (#1297).
+- **Slack streaming preview + aggregated turn card** (#1333).
+- **Feishu after_click card replacement for `cmd:` actions** (#1299).
+- **Codex custom `system_prompt` / `append_system_prompt` config** (#1345); codex `model_catalog_json` highest-priority source (#1074).
+- **Zhipu GLM provider presets** for `z.ai` and `bigmodel` CN endpoint (#1412).
+- **Korean (ko) i18n** for the Web admin UI (#1343), plus `nav.cron` translations for ko/ja/es.
+- **`plugin_dir` for Claude Code plugins** (#1325), `cc-connect send --cwd` workdir support (#1380), `max_attachment_size_mb` (#1392), `CC_LOG_MAX_BACKUPS` env var (#1260), configurable `/history` truncation (#1291).
+- 30+ fixes across feishu, slack, dingtalk, claudecode, codex, core engine, runas, web admin and i18n. Full list in `changelogs/v1.4.0.md`.
+
+### Upgrade notes
+- `cli_path` config field is deprecated in favour of unified `cmd` (#1297). Existing configs continue to work; a deprecation warning is logged. Migrate when convenient.
+- `imageBatchWindow` default for Feishu changed from 150 ms → 500 ms. Override in config if you preferred the older value.
+- `MessageRecallDetector` fallback probe interval changed from 2 s → 60 s. If you relied on the old aggressive polling for custom integrations, the new behaviour is deduped and gated.
+
 ## v1.4.0-beta.3 (2026-06-28)
 
 Rolling beta with 3 additional commits on top of beta.2: one critical regression fix + two low-risk additions. Two additional critical fixes were cherry-picked on top of beta.3 ahead of the v1.4.0 stable cut.

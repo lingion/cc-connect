@@ -160,25 +160,28 @@ MiniMax M3 突破 Coding 与 Agentic AI 前沿，基于 MiniMax Sparse Attention
 </p>
 
 
-## 🆕 v1.4.0-beta.1 更新了什么
+## 🆕 v1.4.0 更新了什么
 
-v1.4.0 系列首个 beta —— 自 v1.3.4 起 22 个 PR，**两个新平台**加入家族。同时把 v1.3.4 的 Windows 命令行修复通过 PR #1378 回流到 main。
+v1.4.0 正式版 —— **两个新平台**加入家族（Cisco Webex、含 E2EE 的 Matrix），agent 与平台层配置选项全面拓宽，韩语 i18n，加上一连串修复，其中包含三个 beta 收尾期紧急 cherry-pick 的关键修复。
 
-- **新增平台** — **Cisco Webex** 一等公民适配器 (#1402, @bryantbarzola)；**Matrix（含 E2EE）** 端到端加密房间支持 (#834, @rablwupei)。cc-connect 内置平台数达到 15 个。
+- 🚨 **关键修复（beta 之后紧急 ship）** — Send goroutine nil 指针 race 会让整个 cc-connect 进程崩溃，所有平台连接断开 (#1436, @gotang)；飞书 `MessageRecallDetector` fallback 每 2 秒探测一次，单 session 一个月烧 ~130 万次飞书 OpenAPI 调用，把免费额度打穿 (#1321, @qvictl)；v1.3.4 引入的 `run_as_user` EACCES regression，beta.1/beta.2 上 `run_as_user` 用户 100% 在 agent 启动时被堵 (#1433, @chenhg5；@vuyiv 报告 #1429)。
+- **新增平台** — **Cisco Webex** 一等公民适配器 (#1402, @bryantbarzola)；**Matrix（含 E2EE）** 端到端加密房间支持 (#834)。cc-connect 内置平台数达到 15 个。
+- **agent option 解析重构** — 所有 agent 适配层走统一 `cmd` 字段，`cli_path` 废弃但仍兼容（带 deprecation 警告）(#1297, @happyTonakai)。
 - **Slack 流式预览 + 聚合 turn 卡片** — agent 思考期间显示实时流式预览，turn 结束后折叠为单张聚合卡片 (#1333)。
-- **飞书富卡片升级** — `cmd:` action handler 支持点击后替换卡片内容 (#1299)；批量图片合并为一条多图消息，不再被 `create_time` watermark 丢掉第一张 (#1408 携带 #1395)。
-- **Codex per-config prompt** — codex agent 现在也支持 `system_prompt` / `append_system_prompt`，跟 claudecode 对齐 (#1345)。
-- **韩语 (ko) i18n** — Web 管理后台增加韩语，已覆盖 zh / en / ja / ko (#1343)。
-- **Claude Code 插件加载** — 新增 `plugin_dir` 配置项，直接指向插件目录加载 (#1325)。
-- **运维参数** — `cc-connect send` 增加 `max_attachment_size_mb` 上限配置 (#1392)；daemon 日志轮转支持 `CC_LOG_MAX_BACKUPS` 环境变量 (#1260)。
-- **acp 优雅 `/stop`** — 新增 `AgentSessionCanceller` 接口，让 ACP agent 可以干净停止 (#1275)。
-- **可靠性修复** — workspace 模型选择跨重启持久化 (#1372)；core 队列消息严格 FIFO drain，旧消息不再被新消息的 `create_time` 误判为 stale 而丢弃 (#1286)；`run_as_user` 下的 workspace 绑定 + workspace 启动修复 (#1315, #1316)；claudecode 中途遇到 compaction 事件不再终止 turn (#1272)；cron session 复合 key 的权限查找修复 (#1067)。
-- **Skill 发现加固** — 只注册 depth-1 `SKILL.md`，嵌套的 SKILL.md 当作 skill 资产忽略，修复了 `frontend-design` skill 泄漏 101 个幻影 slash 命令的问题 (#1317 携带 #1304)。
-- **Windows 命令行修复回流 main** — v1.3.4 的 `--append-system-prompt-file` 修复通过 #1378 上 main。Windows + claudecode 用户在 v1.4.0 上直接可用，不再依赖 v1.3.4 hotfix 分支。
+- **飞书富卡片升级** — `cmd:` action handler 支持点击后替换卡片内容 (#1299)；批量图片合并为一条多图消息（默认 coalesce 窗口由 150ms 调至 500ms），不再被 `create_time` watermark 丢掉第一张 (#1408 携带 #1395)。
+- **Codex per-config prompt + model_catalog_json** — codex agent 支持 `system_prompt` / `append_system_prompt`，跟 claudecode 对齐 (#1345)；Codex 自身的 `model_catalog_json` 作为最高优先级 model 源 (#1074, @happyTonakai)。
+- **智谱 GLM 预设** — `z.ai` 与 `bigmodel`（国内端点）的 provider preset (#1412, @clingnet)。
+- **韩语 (ko) i18n** — Web 管理后台增加韩语 (#1343)；`nav.cron` 同步补齐 ko/ja/es 翻译。
+- **Claude Code 插件加载** — 新增 `plugin_dir` 配置项 (#1325)。
+- **运维参数** — `cc-connect send --cwd` 工作目录 (#1380, @MMMarcinho)；`max_attachment_size_mb` 附件上限 (#1392, @rablwupei)；daemon 日志轮转 `CC_LOG_MAX_BACKUPS` 环境变量 (#1260)；可配置的 `/history` truncation (#1291, @AaronZ345)。
+- **acp 优雅 `/stop`** — 新增 `AgentSessionCanceller` 接口 (#1275)。
+- **可靠性修复** — workspace 模型选择跨重启持久化 (#1372)；core 队列严格 FIFO drain (#1286)；`run_as_user` workspace 绑定 + 启动修复 (#1315, #1316, #1433)；claudecode 中途 compaction 不终止 turn (#1272)；claudecode 工具输出能进 progress card (#1407, @coolrockin)；DingTalk stream loop panic 恢复 (#1390, @gd0094 报告)；`/restart` 通知 queue 后等平台 ready 再 dispatch (#1388 关闭 #1383)；cron 复合 key 权限查找修复 (#1067)。
+- **Skill 发现加固** — 只注册 depth-1 `SKILL.md` (#1317 携带 #1304)。
+- **Windows 命令行修复回流 main** — v1.3.4 的 `--append-system-prompt-file` 修复通过 #1378 上 main (#1378)。
 
-⚠️ **行为变更**：无。所有新配置项均为可选且有安全默认值。v1.3.4 已有配置可直接升级。
+⚠️ **升级提示**：`cli_path` 已废弃，建议迁移到 `cmd`（旧配置仍兼容）。飞书 `imageBatchWindow` 默认值由 150ms 调至 500ms。飞书 `MessageRecallDetector` fallback 探测间隔由 2s 调至 60s。如有自定义需求，可在配置中覆盖。
 
-完整主题汇总（含致谢）见 `changelogs/v1.4.0-beta.1.md`。v1.3.4 的 Windows 命令行修复另见 `changelogs/v1.3.4.md`。
+完整主题汇总（含致谢）见 `changelogs/v1.4.0.md`。各 beta 详情：`changelogs/v1.4.0-beta.1.md`、`v1.4.0-beta.2.md`、`v1.4.0-beta.3.md`。v1.3.4 的 Windows 命令行修复另见 `changelogs/v1.3.4.md`。
 
 
 ## 🧩 平台能力一览
