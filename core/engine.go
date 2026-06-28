@@ -3657,6 +3657,7 @@ func (e *Engine) processInteractiveMessageWith(p Platform, msg *Message, session
 	state.currentMessageID = msg.MessageID
 	state.fromVoice = msg.FromVoice
 	state.sideText = ""
+	as := state.agentSession // capture under lock to avoid race with cleanup
 	state.mu.Unlock()
 
 	// Run Send concurrently with processInteractiveEvents. Some agents block inside
@@ -3664,7 +3665,11 @@ func (e *Engine) processInteractiveMessageWith(p Platform, msg *Message, session
 	// EventPermissionRequest while blocked — the event loop must run in parallel.
 	sendDone := make(chan error, 1)
 	go func() {
-		sendDone <- state.agentSession.Send(promptContent, msg.Images, msg.Files)
+		if as == nil {
+			sendDone <- fmt.Errorf("agent session became nil")
+			return
+		}
+		sendDone <- as.Send(promptContent, msg.Images, msg.Files)
 	}()
 
 	e.processInteractiveEvents(state, session, sessions, interactiveKey, msg.MessageID, turnStart, stopTyping, sendDone, msg.ReplyCtx)
@@ -5594,9 +5599,17 @@ func (e *Engine) processInteractiveEvents(state *interactiveState, session *Sess
 
 				queuedPrompt := e.buildSenderPrompt(queued.content, queued.userID, queued.userName, queued.msgPlatform, queued.msgSessionKey, queued.channelKey)
 
+				state.mu.Lock()
+				as := state.agentSession // capture under lock to avoid race with cleanup
+				state.mu.Unlock()
+
 				nextSend := make(chan error, 1)
 				go func() {
-					nextSend <- state.agentSession.Send(queuedPrompt, queued.images, queued.files)
+					if as == nil {
+						nextSend <- fmt.Errorf("agent session became nil")
+						return
+					}
+					nextSend <- as.Send(queuedPrompt, queued.images, queued.files)
 				}()
 				pendingSend = nextSend
 
@@ -5911,13 +5924,14 @@ func (e *Engine) drainPendingMessages(state *interactiveState, session *Session,
 			return false
 		}
 
-		drainEvents(state.agentSession.Events())
+		as := state.agentSession // capture before drain/gap to avoid race with cleanup
+		drainEvents(as.Events())
 
 		session.AddHistory("user", queued.content)
 
 		sendDone := make(chan error, 1)
 		go func() {
-			sendDone <- state.agentSession.Send(prompt, queued.images, queued.files)
+			sendDone <- as.Send(prompt, queued.images, queued.files)
 		}()
 
 		var stopTyping func()
