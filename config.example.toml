@@ -1748,6 +1748,16 @@ app_secret = "your-feishu-app-secret"
 # Optional: specify a model tier / 可选：指定模型级别
 # model = "auto"  # "auto" | "ultimate" | "performance" | "efficient" | "lite"
 #
+# Optional: override the CLI invocation via the unified `cmd` field. Accepts
+# both a whitespace-separated string and a TOML array. Useful for passing
+# flags that the IM-platform user expects to take effect, e.g. forcing
+# permission bypass without a wrapper script.
+# 可选：通过统一的 `cmd` 字段覆盖 CLI 调用方式，同时接受空白分隔字符串
+# 和 TOML 数组两种写法。可用于让 IM 平台用户透传 CLI 参数，例如绕过权限
+# 检查而无需再用 wrapper 脚本。
+# cmd = "qodercli --permission-mode bypass_permissions"
+# cmd = ["qodercli", "--permission-mode", "bypass_permissions"]
+#
 # [[projects.platforms]]
 # type = "telegram"
 #
