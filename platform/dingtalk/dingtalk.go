@@ -851,7 +851,7 @@ func (p *Platform) Reply(ctx context.Context, rctx any, content string) error {
 
 	payload := map[string]any{
 		"msgtype":  "markdown",
-		"markdown": map[string]string{"title": "reply", "text": content},
+		"markdown": map[string]string{"title": deriveDingtalkTitle(content), "text": content},
 	}
 	if len(atUserIds) > 0 {
 		payload["at"] = map[string]any{
@@ -1661,7 +1661,7 @@ func (p *Platform) sendProactiveMessage(ctx context.Context, rc replyContext, co
 	} else if rc.senderStaffId != "" {
 		// Direct message via /v1.0/robot/oToMessages/batchSend
 		apiURL = "https://api.dingtalk.com/v1.0/robot/oToMessages/batchSend"
-		msgParam, _ := json.Marshal(map[string]string{"title": "reply", "text": content})
+		msgParam, _ := json.Marshal(map[string]string{"title": deriveDingtalkTitle(content), "text": content})
 		requestBody = map[string]any{
 			"robotCode": p.robotCode,
 			"userIds":   []string{rc.senderStaffId},
@@ -1750,4 +1750,95 @@ func preprocessDingTalkMarkdown(s string) string {
 		}
 	}
 	return sb.String()
+}
+
+// maxDingtalkTitleRunes caps the preview title sent to DingTalk. DingTalk
+// shows this title in the conversation list, notification preview and search
+// results — a short, human-readable line keeps the preview useful without
+// truncating inside DingTalk's own UI.
+const maxDingtalkTitleRunes = 30
+
+// dingtalkFallbackTitle is used when the message body has no usable first line
+// (empty, whitespace only, or pure markdown decoration). It is intentionally
+// short and language-neutral so it works regardless of the user's locale.
+const dingtalkFallbackTitle = "Message"
+
+// deriveDingtalkTitle extracts a short preview title from markdown content
+// for DingTalk's conversation list and notification preview. It returns the
+// first non-empty line with leading markdown decoration stripped, truncated
+// to maxDingtalkTitleRunes runes. Falls back to dingtalkFallbackTitle when
+// the content has no usable first line.
+//
+// Examples:
+//
+//	"# Hello World\n\n next..."     → "Hello World"
+//	"  ##  Update\n  body"          → "Update"
+//	"*Important* note here"         → "Important* note here"
+//	"  - bullet item one"           → "bullet item one"
+//	"1. ordered list"               → "ordered list"
+//	"" / "   \n  # "                → "Message"
+//	"plain text body"               → "plain text body"
+//	"" (long line, 100+ chars)      → first 30 runes
+func deriveDingtalkTitle(content string) string {
+	for _, line := range strings.Split(content, "\n") {
+		stripped := stripMarkdownDecoration(strings.TrimSpace(line))
+		if stripped == "" {
+			continue
+		}
+		return truncateRunes(stripped, maxDingtalkTitleRunes)
+	}
+	return dingtalkFallbackTitle
+}
+
+// stripMarkdownDecoration removes common leading markdown markers
+// (heading #, blockquote >, list bullets - + *, inline-code `, and ordered
+// list "1. " / "1) ") from a single line. The function is iterative so
+// multi-level markers like "## " or nested ">> " are also stripped.
+func stripMarkdownDecoration(s string) string {
+	for {
+		original := s
+		switch {
+		case strings.HasPrefix(s, "#"):
+			s = strings.TrimLeft(s, "#")
+			s = strings.TrimLeft(s, " \t")
+		case strings.HasPrefix(s, ">"):
+			s = strings.TrimPrefix(s, ">")
+			s = strings.TrimLeft(s, " \t")
+		case strings.HasPrefix(s, "-"), strings.HasPrefix(s, "+"):
+			s = s[1:]
+			s = strings.TrimLeft(s, " \t")
+		case strings.HasPrefix(s, "*"):
+			// Strip one leading '*' at a time so we don't gobble emphasis markers
+			// mid-line (e.g. "*Important* note" → "Important* note").
+			s = strings.TrimPrefix(s, "*")
+			s = strings.TrimLeft(s, " \t")
+		case strings.HasPrefix(s, "`"):
+			s = strings.TrimPrefix(s, "`")
+		}
+		if loc := orderedListPattern.FindStringIndex(s); loc != nil && loc[0] == 0 {
+			s = s[loc[1]:]
+		}
+		s = strings.TrimSpace(s)
+		if s == original {
+			break
+		}
+	}
+	return s
+}
+
+// orderedListPattern matches a leading ordered-list marker such as "1. " or "12) ".
+var orderedListPattern = regexp.MustCompile(`^[0-9]+[.)]\s+`)
+
+// truncateRunes returns the first n runes of s, or s unchanged when shorter
+// than n. It does not add an ellipsis — DingTalk truncates longer titles in
+// its own UI, so adding "..." here would double-truncate.
+func truncateRunes(s string, n int) string {
+	if n <= 0 {
+		return ""
+	}
+	runes := []rune(s)
+	if len(runes) <= n {
+		return s
+	}
+	return string(runes[:n])
 }

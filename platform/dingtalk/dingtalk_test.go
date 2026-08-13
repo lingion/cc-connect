@@ -1322,3 +1322,145 @@ func TestReply_NoAtUserIdsWhenNoMention(t *testing.T) {
 		t.Fatal("timed out waiting for reply")
 	}
 }
+
+// ──────────────────────────────────────────────────────────────
+// Tests for deriveDingtalkTitle (issue #1668)
+// ──────────────────────────────────────────────────────────────
+
+func TestDeriveDingtalkTitle_SpecExample(t *testing.T) {
+	got := deriveDingtalkTitle("  # Hello World\n\n 接下来是...")
+	want := "Hello World"
+	if got != want {
+		t.Fatalf("deriveDingtalkTitle: got %q, want %q", got, want)
+	}
+}
+
+func TestDeriveDingtalkTitle_FallbackOnEmptyOrWhitespace(t *testing.T) {
+	tests := []struct {
+		name    string
+		content string
+	}{
+		{name: "empty string", content: ""},
+		{name: "only newlines", content: "\n\n\n"},
+		{name: "only whitespace", content: "   \t  "},
+		{name: "only markdown decoration", content: "# \n> \n- \n* "},
+		{name: "whitespace + decoration only", content: "   \n  # \n > \n - "},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := deriveDingtalkTitle(tt.content)
+			if got != dingtalkFallbackTitle {
+				t.Errorf("got %q, want fallback %q", got, dingtalkFallbackTitle)
+			}
+		})
+	}
+}
+
+func TestDeriveDingtalkTitle_MarkdownDecoration(t *testing.T) {
+	tests := []struct {
+		name    string
+		content string
+		want    string
+	}{
+		{name: "h1 with leading whitespace", content: "  # Hello World\n\n next...", want: "Hello World"},
+		{name: "h2 with extra space after marker", content: "## Update\n body", want: "Update"},
+		{name: "h3 deep nesting", content: "### Section", want: "Section"},
+		{name: "h4 through h6", content: "###### tiny", want: "tiny"},
+		{name: "blockquote", content: "> quoted line", want: "quoted line"},
+		{name: "nested blockquote", content: ">> deeper", want: "deeper"},
+		{name: "unordered bullet dash", content: "- first item", want: "first item"},
+		{name: "unordered bullet plus", content: "+ first item", want: "first item"},
+		{name: "unordered bullet star", content: "* first item", want: "first item"},
+		{name: "ordered list dot", content: "1. ordered", want: "ordered"},
+		{name: "ordered list paren", content: "12) numbered", want: "numbered"},
+		{name: "leading inline-code tick", content: "`code snippet`", want: "code snippet`"},
+		{name: "plain text passes through", content: "plain text body", want: "plain text body"},
+		{name: "blank first line falls through to second", content: "\nactual content here", want: "actual content here"},
+		{name: "multiple blank lines before real content", content: "\n\n\n# Real\nmore", want: "Real"},
+		{name: "heading then blank then body keeps first heading", content: "# Title\n\nbody", want: "Title"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := deriveDingtalkTitle(tt.content)
+			if got != tt.want {
+				t.Errorf("got %q, want %q", got, tt.want)
+			}
+		})
+	}
+}
+
+func TestDeriveDingtalkTitle_Truncation(t *testing.T) {
+	// Build a single-line string longer than maxDingtalkTitleRunes.
+	long := strings.Repeat("a", maxDingtalkTitleRunes+50)
+	got := deriveDingtalkTitle(long)
+	want := strings.Repeat("a", maxDingtalkTitleRunes)
+	if got != want {
+		t.Errorf("long content not truncated to %d runes: got len=%d", maxDingtalkTitleRunes, len(got))
+	}
+
+	// Exactly at the boundary should pass through unchanged.
+	exact := strings.Repeat("b", maxDingtalkTitleRunes)
+	if got := deriveDingtalkTitle(exact); got != exact {
+		t.Errorf("exactly-%d content should pass through, got len=%d", maxDingtalkTitleRunes, len(got))
+	}
+
+	// One short of the boundary should also pass through unchanged.
+	short := strings.Repeat("c", maxDingtalkTitleRunes-1)
+	if got := deriveDingtalkTitle(short); got != short {
+		t.Errorf("shorter content should pass through, got %q", got)
+	}
+}
+
+func TestDeriveDingtalkTitle_MultibyteRunes(t *testing.T) {
+	// CJK characters must be counted as one rune each, not as 3 UTF-8 bytes.
+	// 30 CJK chars fits exactly; 31 should truncate.
+	exactCJK := strings.Repeat("你", maxDingtalkTitleRunes)
+	if got := deriveDingtalkTitle(exactCJK); got != exactCJK {
+		t.Errorf("exactly-%d CJK runes should pass through, got len(rune)=%d",
+			maxDingtalkTitleRunes, len([]rune(got)))
+	}
+
+	overCJK := strings.Repeat("好", maxDingtalkTitleRunes+1)
+	got := deriveDingtalkTitle(overCJK)
+	if len([]rune(got)) != maxDingtalkTitleRunes {
+		t.Errorf("CJK truncation wrong: got %d runes, want %d", len([]rune(got)), maxDingtalkTitleRunes)
+	}
+}
+
+func TestReply_TitleIsDerivedFromContent(t *testing.T) {
+	gotPayload := make(chan map[string]any, 1)
+	sessionWebhook := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		var payload map[string]any
+		if err := json.NewDecoder(r.Body).Decode(&payload); err != nil {
+			t.Fatalf("decode reply payload: %v", err)
+		}
+		gotPayload <- payload
+		w.WriteHeader(http.StatusOK)
+	}))
+	defer sessionWebhook.Close()
+
+	p := &Platform{}
+	rc := replyContext{sessionWebhook: sessionWebhook.URL}
+
+	if err := p.Reply(context.Background(), rc, "  # Hello World\n\nbody"); err != nil {
+		t.Fatalf("Reply: %v", err)
+	}
+
+	select {
+	case payload := <-gotPayload:
+		md, ok := payload["markdown"].(map[string]any)
+		if !ok {
+			t.Fatalf("expected markdown field in payload, got %T", payload["markdown"])
+		}
+		title, _ := md["title"].(string)
+		if title != "Hello World" {
+			t.Errorf("title = %q, want %q", title, "Hello World")
+		}
+		// Regression guard: the literal "reply" string must never come back.
+		if title == "reply" {
+			t.Error("title still hardcoded to 'reply' — issue #1668 regression")
+		}
+	case <-time.After(time.Second):
+		t.Fatal("timed out waiting for reply")
+	}
+}
