@@ -47,11 +47,13 @@
 <details open>
 <summary>赞助商</summary>
 
-[![MiniMax](assets/banners/minimax-zh.png)](https://platform.minimaxi.com/subscribe/token-plan?code=HAvthxk1tT&source=link)
+[![Kimi](https://gcdn.moonshot.cn/growth-cdn/sponsor/kimi-zh.png)](https://www.kimi.com/code/?aff=cc-connect)
 
-MiniMax M3 突破 Coding 与 Agentic AI 前沿，基于 MiniMax Sparse Attention 支持 1M 超长上下文，并从零原生支持多模态。在 SWE-Bench Pro (59.0)、Terminal Bench 2.1 (66.0)、VIBE V2 (60.1)、SVG-Bench (63.7)、KernelBench Hard (28.8)、BrowseComp (83.5)、GDPval rubrics (74.7)、Banker ToolBench (76.1)、MCP Atlas (74.2)、OSWorld-verified (70.0) 等多项基准中领先业界。Mini 价格 Max 性能，Token Plan 助你 Build / Learn / Ship。
+感谢 [Kimi](https://www.kimi.com/code/?aff=cc-connect) 赞助本项目！[Kimi K3](https://www.kimi.com/blog/kimi-k3) 是 Moonshot AI 迄今能力最强的模型，也是全球首个开源 3T 级模型。K3 拥有 2.8T 参数、原生视觉能力与 100 万 Token 上下文，在长程编码、知识工作和推理任务中展现前沿性能。
 
-[点击此处](https://platform.minimaxi.com/subscribe/token-plan?code=HAvthxk1tT&source=link)享 MiniMax Token Plan 专属 88 折优惠 + cc-connect 用户专属代金券！
+通过 cc-connect，你可以将本地运行的 Kimi CLI 连接到飞书、钉钉、Telegram、Slack、Discord、企业微信等即时通讯工具，随时让 Kimi 阅读和修改代码、排查问题、执行命令与处理自动化任务。
+
+**cc-connect 已支持 Kimi CLI。立即体验 **[Kimi Code 订阅](https://www.kimi.com/code/?aff=cc-connect)**，或前往 Kimi 开放平台（[中文站](https://platform.kimi.com?track_id=track-78c5d46574a54286a4ff42f7331272ba&aff=cc-connect)｜[Global](https://platform.kimi.ai?track_id=track-dd37b0bea7a64b99b3fe2217b398e20b&aff=cc-connect)）使用 API。
 
 ---
 
@@ -59,6 +61,16 @@ MiniMax M3 突破 Coding 与 Agentic AI 前沿，基于 MiniMax Sparse Attention
 <tr>
 <td width="150"><a href="https://apinebula.com/UrO0q1"><img src="assets/sponsors/apinebula.png" alt="APINEBULA" width="120"></a></td>
 <td>感谢 APINEBULA 赞助本项目！APINEBULA 是银河录像局旗下的企业级 AI 聚合平台，背靠大平台资源，面向开发者、团队与企业用户提供稳定、高性价比的大模型 API 接入服务。平台聚合 Claude、GPT、Gemini等主流满血模型，一个接口，接入全球顶尖AI大模型，各大模型价格低至 1 折起，支持企业级高并发、正式合同、对公打款与开票服务，适合 AI 编程、Agent 开发、业务系统集成等多种场景！使用此链接注册并在充值时填写"ccconnect"优惠码可享九折优惠！</td>
+</tr>
+
+<tr>
+<td width="150"><a href="https://s.qiniu.com/aUbueu"><img src="assets/sponsors/qiniu.png" alt="七牛云 Qiniu Cloud" width="120"></a></td>
+<td>感谢 <a href="https://s.qiniu.com/aUbueu">七牛云 AI</a> 赞助本项目！七牛云（02567.HK）旗下企业级 MaaS 平台，一站式调用全球 150+ 主流模型，兼容全球主流模型厂商协议，覆盖文本、图像、音频、视频、文件处理等全模态处理能力，服务超过 169 万企业及开发者用户。专属福利：企业用户免费领 1200万 Token，邀请好友最高得百亿 Token。</td>
+</tr>
+
+<tr>
+<td width="150"><a href="https://api.fenno.ai/register?redirect=/purchase?tab=subscription%26group=16&aff=C7KG6WBS7CQJ"><img src="assets/sponsors/fenno.png" alt="Fenno.ai" width="120"></a></td>
+<td>感谢 Fenno.ai 赞助本项目！Fenno.ai 是一家稳定、高效的 API 中转服务商，目前主要提供 Codex 中转服务，兼容 OpenAI 及 Anthropic 协议，可灵活接入 Codex、Claude Code、OpenCode 等主流编程工具，可稳定支撑千亿 Token/日的企业级调用需求，支持国内及海外主体公对公结算、开票。Fenno.ai 为 CC-Connect 的用户提供了专属福利：通过 <a href="https://api.fenno.ai/register?redirect=/purchase?tab=subscription%26group=16&aff=C7KG6WBS7CQJ">此链接</a> 即可订阅 9.9 元/150 刀额度的超值 Coding Plan，邀请好友最高可享 20% 奖励，多邀多得！</td>
 </tr>
 
 <tr>
@@ -262,6 +274,91 @@ v1.5.0 系列首个 beta —— 自 v1.4.1 起 **三个新集成面** + agent �
   <em>左：飞书 &nbsp;|&nbsp; Telegram &nbsp;|&nbsp; 右：微信</em>
 </p>
 
+
+## 📋 准备工作
+
+> **请严格按照以下顺序安装** — cc-connect 是本地 AI 编程 Agent 的桥接工具，因此对应的 Agent CLI 必须先安装并完成登录认证，之后 cc-connect 才能正常启动。如果跳过前面的步骤直接启动 cc-connect，进程会直接退出并报错 `claudecode: claude CLI not found in PATH`（其他 Agent 报错类似），Web UI 在 `:9820` 也就无从访问。
+
+### 1️⃣ 安装 AI Agent CLI
+
+选择你要桥接的 Agent，至少装一个。
+
+```bash
+# Claude Code（最常用）
+brew install --cask claude-code            # macOS / Linux Homebrew
+# 或
+npm install -g @anthropic-ai/claude-code   # 任意平台通过 npm
+
+# OpenAI Codex
+npm install -g @openai/codex
+
+# Google Gemini CLI
+npm install -g @google/gemini-cli
+
+# iFlow CLI
+npm install -g @iflow-ai/iflow-cli
+
+# Qoder CLI
+curl -fsSL https://qoder.com/install | bash
+```
+
+**Cursor Agent** 和 **OpenCode** 请参考各自的官方安装文档：
+- Cursor Agent: <https://docs.cursor.com/agent>
+- OpenCode: <https://github.com/opencode-ai/opencode>
+
+确认可执行文件在 `PATH` 中：
+
+```bash
+claude --version       # 或 codex / gemini / opencode / qodercli / cursor-agent ...
+```
+
+### 2️⃣ 完成 Agent 登录认证
+
+每个 Agent 都有自己的登录流程 — 先在终端交互式跑一次，让它把凭据存到你的 home 目录：
+
+```bash
+claude login           # 会在浏览器里打开授权页面
+# 或
+codex login            # / gemini / opencode 等也类似，请参考各自文档
+```
+
+跳过这一步的话，cc-connect 仍能启动，但 Agent 会因为未认证拒绝所有请求。
+
+### 3️⃣ 安装 cc-connect
+
+```bash
+# npm（任意平台）
+npm install -g cc-connect
+
+# Homebrew（macOS / Linux）
+brew install cc-connect
+
+# 也可以从 https://github.com/chenhg5/cc-connect/releases 直接下载二进制
+```
+
+### 4️⃣ 启动 cc-connect 并打开 Web UI
+
+```bash
+cc-connect             # 启动服务；首次运行会自动生成 ~/.cc-connect/config.toml
+```
+
+首次启动时，cc-connect 会打印类似：
+
+```
+Web admin:  http://localhost:9820
+```
+
+在浏览器里打开该地址。如果 `9820` 已被占用，可以传 `--web-port 9821` 或在 `config.toml` 里设置 `web_port`。
+
+> **注意：** `cc-connect web` *只* 打开浏览器和配置界面，并**不会**启动服务本身。仍需要在另一个终端里跑 `cc-connect`。
+
+### 5️⃣ 在 Web UI 里配置平台 Bot Token
+
+在 Web UI 里新建一个项目，然后添加至少一个平台（飞书 / Telegram / Discord / Slack / 钉钉 / 企业微信 / QQ / LINE / 微信 ilink），把该平台开发者后台的 Bot Token 粘贴进去。保存后 cc-connect 会热加载。
+
+至此完成 — 给你的 Bot 发条消息，cc-connect 就会把它转给本地的 Agent。
+
+---
 
 ## 🚀 快速开始
 
