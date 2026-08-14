@@ -571,6 +571,73 @@ func TestAgent_StartSession(t *testing.T) {
 	if !ps.Alive() {
 		t.Error("session should be alive")
 	}
+	// CC_PERMISSION_MODE 必须被注入，permission-gate 扩展才能感知全自动模式。
+	found := false
+	for _, e := range ps.extraEnv {
+		if e == "CC_PERMISSION_MODE=yolo" {
+			found = true
+			break
+		}
+	}
+	if !found {
+		t.Errorf("extraEnv = %v, want CC_PERMISSION_MODE=yolo", ps.extraEnv)
+	}
+}
+
+func TestAgent_StartSession_NoModeNoEnv(t *testing.T) {
+	a := &Agent{cmd: "echo", workDir: "/tmp"} // mode 为空
+
+	sess, err := a.StartSession(context.Background(), "")
+	if err != nil {
+		t.Fatalf("StartSession() error = %v", err)
+	}
+	defer func() {
+		if err := sess.Close(); err != nil {
+			t.Errorf("Close() error = %v", err)
+		}
+	}()
+
+	ps := sess.(*piSession)
+	for _, e := range ps.extraEnv {
+		if len(e) >= len("CC_PERMISSION_MODE=") && e[:len("CC_PERMISSION_MODE=")] == "CC_PERMISSION_MODE=" {
+			t.Errorf("extraEnv = %v, CC_PERMISSION_MODE should be absent when mode is empty", ps.extraEnv)
+		}
+	}
+}
+
+func TestAgent_StartSession_UserOverrideWins(t *testing.T) {
+	// 回归保护：引擎注入的 CC_PERMISSION_MODE 必须追加在 configEnv/sessionEnv
+	// 之后，这样用户显式设置的 CC_PERMISSION_MODE 排在前面、优先生效（getenv
+	// 返回第一个匹配项）。若未来重构把它提前，引擎值会反过来覆盖用户的显式设置。
+	a := &Agent{cmd: "echo", workDir: "/tmp", mode: "yolo"}
+	a.SetSessionEnv([]string{"CC_PERMISSION_MODE=default"})
+
+	sess, err := a.StartSession(context.Background(), "")
+	if err != nil {
+		t.Fatalf("StartSession() error = %v", err)
+	}
+	defer func() {
+		if err := sess.Close(); err != nil {
+			t.Errorf("Close() error = %v", err)
+		}
+	}()
+
+	ps := sess.(*piSession)
+	userIdx, engineIdx := -1, -1
+	for i, e := range ps.extraEnv {
+		switch e {
+		case "CC_PERMISSION_MODE=default":
+			userIdx = i
+		case "CC_PERMISSION_MODE=yolo":
+			engineIdx = i
+		}
+	}
+	if userIdx == -1 || engineIdx == -1 {
+		t.Fatalf("extraEnv = %v, want both user (default) and engine (yolo) CC_PERMISSION_MODE entries", ps.extraEnv)
+	}
+	if userIdx > engineIdx {
+		t.Errorf("user CC_PERMISSION_MODE at %d must precede engine value at %d so user override wins", userIdx, engineIdx)
+	}
 }
 
 // ── extractToolInput ─────────────────────────────────────────
