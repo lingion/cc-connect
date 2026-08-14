@@ -1,5 +1,45 @@
 ﻿# Changelog
 
+## v1.5.0-beta.3 (2026-08-14)
+
+Rolling beta with **36 commits** merged from `main` since beta.2. Owner requested beta.3 (not direct stable) — beta.2 is ~1 month old and many fixes/features landed on main.
+
+See `changelogs/v1.5.0-beta.3.md` for the full themed summary.
+
+### New Platforms
+- **Google Chat** — first-class platform adapter (#1424).
+- **WPS Agentspace** — auto-login and token encryption (#1439).
+- **Tuitui** — platform support (#849).
+
+### Features
+- **Feishu topic workspace isolation** (#1551 fixing #1543).
+- **Feishu quoted file on-demand download** (#1588).
+- **Feishu first thread mention bootstrap** (#1627).
+- **DingTalk chat-list title from content** (#1288).
+- **Antigravity tool permissions bridge** (#1328).
+- **Admin-gated exec commands** — `/commands addexec` and `/cron addexec` behind `admin_from` (#1036).
+- **Pi permission mode env injection** (#1637).
+- **Agent cmd TOML array form** (#1673 fixing #1670).
+- **sonnet[1m] fallback model** (#1107).
+
+### Fixed
+- **Weixin send budget ret=-2** — fail fast per-account (#1643).
+- **Web admin agent-type-aware permission modes** (#1251).
+- **Pi models-store.json fallback** (#1636).
+- **Core code fence split** (#1630).
+- **Core tool_max_len in card mode** (#1257).
+- **DingTalk @userid extraction** (#1250).
+- **Attachment filename collisions** (#1557).
+- **Claude Code session title fallback** (#1549).
+- **Claude Code missing work_dir detection** (#1425).
+- **Antigravity session resume** (#1584).
+- **Usage 7-day window duplicate render** (#1583).
+- **i18n /model switch copy** (#1373).
+- **CLI reject unknown commands** (#353).
+- **Daemon CheckLinger stub on non-Linux** (#1093).
+- **Kimi preset global/China split**.
+- **cloud-web IPv6 test fix** (#1646).
+
 ## v1.5.0-beta.2 (2026-07-14)
 
 Rolling beta with 1 commit on top of beta.1: codex `/model` gpt-5.x visibility fix. Owner requested beta.2 (not direct stable) after E2E validation.
