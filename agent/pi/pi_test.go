@@ -989,6 +989,95 @@ func TestHandleEvent_AgentEndEmitsResult(t *testing.T) {
 	}
 }
 
+// ── handleEvent: agent_end willRetry (transient error auto-retry) ──
+//
+// Pi auto-retries transient provider failures (e.g. HTTP 429) inside the
+// same turn: it emits agent_end with willRetry=true, then re-runs the agent
+// loop. Closing the turn on the first agent_end (or on the intermediate
+// message_end error) makes the engine report a failure that Pi is about to
+// recover from, and the retry outcome is dropped as stale events.
+
+func TestHandleEvent_AgentEndWillRetryKeepsTurnOpen(t *testing.T) {
+	s := newTestSession(true) // rpc=true
+	defer s.cancel()
+
+	s.handleEvent(map[string]any{
+		"type": "message_end",
+		"message": map[string]any{
+			"role":         "assistant",
+			"errorMessage": "429 rate_limit_error",
+		},
+	})
+	s.handleEvent(map[string]any{"type": "agent_end", "willRetry": true, "messages": []any{}})
+
+	evts := drainEvents(s)
+	if len(evts) != 0 {
+		t.Fatalf("willRetry agent_end must not close the turn, got %d events: %#v", len(evts), evts)
+	}
+	if s.pendingErr == "" {
+		t.Error("pendingErr must be retained while Pi is retrying")
+	}
+}
+
+func TestHandleEvent_AgentEndFlushesPendingError(t *testing.T) {
+	s := newTestSession(true) // rpc=true
+	defer s.cancel()
+
+	s.handleEvent(map[string]any{
+		"type": "message_end",
+		"message": map[string]any{
+			"role":         "assistant",
+			"errorMessage": "429 rate_limit_error",
+		},
+	})
+	s.handleEvent(map[string]any{"type": "agent_end", "willRetry": false, "messages": []any{}})
+
+	evts := drainEvents(s)
+	if len(evts) != 2 {
+		t.Fatalf("expected EventError + EventResult, got %d events: %#v", len(evts), evts)
+	}
+	if evts[0].Type != core.EventError {
+		t.Errorf("first event = %s, want EventError", evts[0].Type)
+	}
+	if evts[0].Error == nil || !strings.Contains(evts[0].Error.Error(), "429") {
+		t.Errorf("error = %v, want deferred 429", evts[0].Error)
+	}
+	if evts[1].Type != core.EventResult {
+		t.Errorf("second event = %s, want EventResult", evts[1].Type)
+	}
+	if s.pendingErr != "" {
+		t.Errorf("pendingErr must be cleared after flush, got %q", s.pendingErr)
+	}
+}
+
+func TestHandleEvent_AgentEndRetrySuccessDropsPendingError(t *testing.T) {
+	s := newTestSession(true) // rpc=true
+	defer s.cancel()
+
+	// Transient 429 -> Pi retries (willRetry) -> retry succeeds.
+	s.handleEvent(map[string]any{
+		"type": "message_end",
+		"message": map[string]any{
+			"role":         "assistant",
+			"errorMessage": "429 rate_limit_error",
+		},
+	})
+	s.handleEvent(map[string]any{"type": "agent_end", "willRetry": true, "messages": []any{}})
+	s.handleEvent(map[string]any{
+		"type":    "message_end",
+		"message": map[string]any{"role": "assistant"},
+	})
+	s.handleEvent(map[string]any{"type": "agent_end", "willRetry": false, "messages": []any{}})
+
+	evts := drainEvents(s)
+	if len(evts) != 1 {
+		t.Fatalf("expected only EventResult after successful retry, got %d events: %#v", len(evts), evts)
+	}
+	if evts[0].Type != core.EventResult {
+		t.Errorf("expected EventResult, got %s", evts[0].Type)
+	}
+}
+
 func TestHandleEvent_UnhandledType(t *testing.T) {
 	s := newTestSession()
 	defer s.cancel()
@@ -1293,6 +1382,115 @@ func TestHandleMessageUpdate_ToolcallEnd_UsesPartialFallback(t *testing.T) {
 	}
 }
 
+// TestHandleMessageUpdate_ToolcallEnd_DirectToolCall covers the pi v0.84.0
+// breaking change: message_update emits only assistantMessageEvent deltas,
+// with the cumulative message and assistantMessageEvent.partial removed.
+// toolcall_end now carries the complete toolCall object; without the
+// toolCall branch, EventToolUse is never emitted and tool calls are lost.
+func TestHandleMessageUpdate_ToolcallEnd_DirectToolCall(t *testing.T) {
+	s := newTestSession()
+	defer s.cancel()
+
+	s.handleEvent(map[string]any{
+		"type": "message_update",
+		"assistantMessageEvent": map[string]any{
+			"type": "toolcall_end",
+			"toolCall": map[string]any{
+				"type":      "toolCall",
+				"name":      "read",
+				"arguments": map[string]any{"file_path": "/tmp/foo.txt"},
+			},
+		},
+	})
+
+	evts := drainEvents(s)
+	if len(evts) != 1 {
+		t.Fatalf("got %d events, want 1", len(evts))
+	}
+	if evts[0].Type != core.EventToolUse || evts[0].ToolName != "read" || evts[0].ToolInput != "/tmp/foo.txt" {
+		t.Errorf("event = %+v", evts[0])
+	}
+}
+
+// TestHandleMessageUpdate_ToolcallEnd_CoexistsWithPartial pins the dedup
+// semantics: on v0.83.0 the wire carried BOTH toolCall and partial (they
+// reference the same finalized content block). The fast path must win and
+// emit exactly one EventToolUse — a future refactor that removes the early
+// return would double-emit, and one that breaks the fast path would emit 0.
+func TestHandleMessageUpdate_ToolcallEnd_CoexistsWithPartial(t *testing.T) {
+	s := newTestSession()
+	defer s.cancel()
+
+	s.handleEvent(map[string]any{
+		"type": "message_update",
+		"assistantMessageEvent": map[string]any{
+			"type":         "toolcall_end",
+			"contentIndex": float64(0),
+			"toolCall": map[string]any{
+				"type":      "toolCall",
+				"name":      "read",
+				"arguments": map[string]any{"file_path": "/tmp/foo.txt"},
+			},
+			"partial": map[string]any{
+				"content": []any{
+					map[string]any{
+						"type":      "toolCall",
+						"name":      "bash",
+						"arguments": map[string]any{"command": "ls"},
+					},
+				},
+			},
+		},
+	})
+
+	evts := drainEvents(s)
+	if len(evts) != 1 {
+		t.Fatalf("got %d events, want exactly 1 (no double-emit)", len(evts))
+	}
+	if evts[0].Type != core.EventToolUse || evts[0].ToolName != "read" || evts[0].ToolInput != "/tmp/foo.txt" {
+		t.Errorf("event = %+v (want the toolCall fast-path event, not the partial one)", evts[0])
+	}
+}
+
+// TestHandleMessageUpdate_ToolcallEnd_NonToolCallType exercises the
+// toolCall-present-but-wrong-type path: it must fall through to the
+// message/partial snapshot path rather than emit from the toolCall fast
+// path. The partial carries a real toolCall so the fixture can observe the
+// fall-through — an unconditional early return (the M1 bug) would emit 0.
+func TestHandleMessageUpdate_ToolcallEnd_NonToolCallType(t *testing.T) {
+	s := newTestSession()
+	defer s.cancel()
+
+	s.handleEvent(map[string]any{
+		"type": "message_update",
+		"assistantMessageEvent": map[string]any{
+			"type":         "toolcall_end",
+			"contentIndex": float64(0),
+			"toolCall": map[string]any{
+				"type": "text",
+				"text": "hello",
+			},
+			"partial": map[string]any{
+				"content": []any{
+					map[string]any{
+						"type":      "toolCall",
+						"name":      "read",
+						"arguments": map[string]any{"file_path": "/tmp/foo.txt"},
+					},
+				},
+			},
+		},
+	})
+
+	evts := drainEvents(s)
+	if len(evts) != 1 {
+		t.Fatalf("got %d events, want 1 from the message/partial fallback", len(evts))
+	}
+	if evts[0].Type != core.EventToolUse || evts[0].ToolName != "read" || evts[0].ToolInput != "/tmp/foo.txt" {
+		t.Errorf("event = %+v (want the partial-path event)", evts[0])
+	}
+}
+
 func TestHandleMessageUpdate_ToolcallEnd_NonToolCallItem(t *testing.T) {
 	s := newTestSession()
 	defer s.cancel()
@@ -1477,15 +1675,15 @@ func TestHandleMessageEnd_AssistantError(t *testing.T) {
 		},
 	})
 
+	// Errors are deferred (buffered in pendingErr) so transient provider
+	// failures that Pi auto-retries are not surfaced mid-turn. The agent_end
+	// handler flushes the buffer once the turn truly ends.
 	evts := drainEvents(s)
-	if len(evts) != 1 {
-		t.Fatalf("got %d events, want 1", len(evts))
+	if len(evts) != 0 {
+		t.Fatalf("expected no immediate events for assistant error, got %d", len(evts))
 	}
-	if evts[0].Type != core.EventError {
-		t.Errorf("type = %s", evts[0].Type)
-	}
-	if evts[0].Error == nil || !strings.Contains(evts[0].Error.Error(), "400") {
-		t.Errorf("error = %v", evts[0].Error)
+	if s.pendingErr != "400 model not supported" {
+		t.Errorf("pendingErr = %q, want %q", s.pendingErr, "400 model not supported")
 	}
 }
 
