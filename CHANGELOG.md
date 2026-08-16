@@ -1,5 +1,16 @@
 ﻿# Changelog
 
+## v1.5.0-beta.5 (2026-08-16)
+
+Rolling beta with **1 commit** on top of beta.4: P1 stability fixes from beta.3 QA (#1686).
+
+See `changelogs/v1.5.0-beta.5.md` for details.
+
+### Fixed
+- **Restart-notify panic recovery** — `defer recover()` in restart-notify goroutine prevents daemon crash (#1693).
+- **Cross-type image batch flush** — flush pending image batch before non-image dispatch to prevent image loss (#1693).
+- **Idle close race fixes** — re-arm timer on background turns; schedule before drain (#1693).
+
 ## v1.5.0-beta.4 (2026-08-16)
 
 Rolling beta with **6 commits** merged from `main` since beta.3. Kimi Code CLI dialect + Pi retry/toolcall fixes + WeCom quote context.
