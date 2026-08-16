@@ -1,5 +1,21 @@
 ﻿# Changelog
 
+## v1.5.0-beta.4 (2026-08-16)
+
+Rolling beta with **6 commits** merged from `main` since beta.3. Kimi Code CLI dialect + Pi retry/toolcall fixes + WeCom quote context.
+
+See `changelogs/v1.5.0-beta.4.md` for details.
+
+### Features
+- **Kimi Code CLI native dialect** — probe-gated flags, modern resume, dual stream parser, session listing (#1564 fixing #1561).
+
+### Fixed
+- **Kimi `--work-dir` flag gating** — probe before emit (#1483 fixing #1476).
+- **Pi willRetry turn continuity** — keep turn open during auto-retry (#1597).
+- **Pi v0.84.0 toolcall_end** — handle events without cumulative message (#1674).
+- **WeCom quoted message context** (#1669).
+- **Web admin work_dir validation** (#1572).
+
 ## v1.5.0-beta.3 (2026-08-14)
 
 Rolling beta with **36 commits** merged from `main` since beta.2. Owner requested beta.3 (not direct stable) — beta.2 is ~1 month old and many fixes/features landed on main.
