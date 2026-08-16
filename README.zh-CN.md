@@ -187,21 +187,20 @@
 </p>
 
 
-## 🆕 v1.5.0-beta.1 更新了什么
+## 🆕 v1.5.0 更新了什么
 
-v1.5.0 系列首个 beta —— 自 v1.4.1 起 **三个新集成面** + agent 生命周期与平台层 polish。
+v1.5.0 正式版 —— 自 v1.4.1 起稳定化 beta.1 → beta.5（约 93 个 commit），**五个新平台**、**Reasonix agent**、飞书/Kimi/Pi 强化及生产 P1 稳定性修复。
 
-- **新增平台** — **腾讯元宝 Bot API** 一等公民适配器 (#1445, @skyblue)；**cloud_web** 自托管 IM Gateway (CWIP v1, websocket / long_poll / gateway) (#1282, @jiagou123)。
-- **新增 Agent** — **Reasonix** HTTP serve API 适配器, 支持 default/yolo/plan 权限模式 (#1281, @mchenziyi)。
-- **`agent_session_idle_timeout_mins`** — 空闲 live agent 进程在干净 turn 结束后自动关闭, 保留 cc-connect session 与 saved agent session ID; 下一条消息 resume 同一会话 (#1338, @hl1221hl)。
-- **Pi RPC 模式** — RPC mode + `extension_ui` 权限转发 (#1440, @happyTonakai)。
-- **飞书升级** — `mention_map` 出站 bot-to-bot `@` 解析 (#1341); 跨 bot relay 回写到 caller 线程 (#1413)。
-- **俄语 (ru) i18n** — Web 管理后台俄语 (#1449, @sonsay)。
-- **可靠性修复** — permission 后恢复 stream preview (#1451); `SaveFilesToDisk` / `AppendFileRefs` 绝对路径 (#1462); session lock 前 queue placeholder (#1389); codex app-server write 超时 (#1448); Slack streaming-card `NO_REPLY` 抑制 (#1397); 隐藏 agent footer 行 (#1416)。
+- **新增平台** — **腾讯元宝** (#1445)；**cloud_web** 自托管 IM Gateway (#1282)；**Google Chat** (#1424)；**WPS Agentspace** (#1439)；**Tuitui** (#849)。
+- **新增 Agent** — **Reasonix** HTTP serve API，支持 default/yolo/plan 权限模式 (#1281)。
+- **飞书** — 话题 workspace 隔离 (#1551)；引用文件按需下载 (#1588)；首次进话题 bootstrap (#1627)；跨类型图片 batch flush (#1693)。
+- **Kimi & Pi** — Kimi Code CLI 原生方言 (#1564)；Pi v0.84.0 toolcall_end + willRetry (#1674, #1597)；Pi RPC 模式 (#1440)。
+- **核心稳定性** — `/restart` panic 恢复；idle close 竞态修复；codex gpt-5.x `/model` (#1546)；Claude Code 会话标题 (#1549)；微信 send budget (#1643)。
+- **`agent_session_idle_timeout_mins`** — 空闲 agent 进程自动关闭，保留 session 供 resume (#1338)。
 
-⚠️ **升级提示**：所有新配置项均为可选且有安全默认值。v1.4.1 已有配置可直接升级。
+⚠️ **升级提示**：无 breaking change。所有新配置项均为可选且有安全默认值。v1.4.1 配置可直接升级。
 
-完整主题汇总（含致谢）见 `changelogs/v1.5.0-beta.1.md`。
+完整汇总见 `changelogs/v1.5.0.md`。
 
 
 ## 🧩 平台能力一览

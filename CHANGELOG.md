@@ -1,5 +1,26 @@
 ﻿# Changelog
 
+## v1.5.0 (2026-08-16)
+
+First stable release of the v1.5.0 series since v1.4.1. Stabilizes beta.1 → beta.5 (~93 commits) including production P1 fixes (#1693 / #1686).
+
+See `changelogs/v1.5.0.md` for the full themed summary.
+
+### New Platforms
+- **Tencent Yuanbao Bot API** (#1445), **cloud_web** IM gateway (#1282), **Google Chat** (#1424), **WPS Agentspace** (#1439), **Tuitui** (#849).
+
+### New Agents
+- **Reasonix** HTTP serve API adapter (#1281).
+
+### Features
+- **Feishu topic workspace isolation** (#1551), **quoted file download** (#1588), **first thread bootstrap** (#1627).
+- **Kimi Code CLI native dialect** (#1564), **Pi RPC + retry/toolcall fixes** (#1440, #1597, #1674).
+- **`agent_session_idle_timeout_mins`** (#1338), **admin-gated exec commands** (#1036).
+
+### Fixed
+- **#1686 P1 stability** — restart recover, cross-type image flush, idle close race (#1693).
+- **codex `/model` gpt-5.x** (#1546), **Claude Code session titles** (#1549), **Weixin send budget** (#1643), **attachment collisions** (#1557), and 30+ additional fixes from beta cycle.
+
 ## v1.5.0-beta.5 (2026-08-16)
 
 Rolling beta with **1 commit** on top of beta.4: P1 stability fixes from beta.3 QA (#1686).

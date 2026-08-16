@@ -188,21 +188,20 @@ With cc-connect, you can bring Kimi CLI from your local machine into Feishu/Lark
 </p>
 
 
-## 🆕 What's New in v1.5.0-beta.1
+## 🆕 What's New in v1.5.0
 
-First beta of the v1.5.0 series since v1.4.1 — **three new integration surfaces** plus agent lifecycle and platform polish.
+Stable release stabilizing v1.5.0-beta.1 → beta.5 (~93 commits since v1.4.1) — **five new platforms**, **Reasonix agent**, Feishu/Kimi/Pi hardening, and production P1 stability fixes.
 
-- **New platforms** — **Tencent Yuanbao Bot API** first-class adapter (#1445, @skyblue); **cloud_web** self-hosted IM gateway (CWIP v1, websocket / long_poll / gateway) (#1282, @jiagou123).
-- **New agent** — **Reasonix** HTTP serve API adapter with default/yolo/plan permission modes (#1281, @mchenziyi).
-- **`agent_session_idle_timeout_mins`** — close idle live agent processes after a clean turn while preserving session + saved agent session ID; next message resumes the same conversation (#1338, @hl1221hl).
-- **Pi RPC mode** — RPC mode with `extension_ui` permission forwarding (#1440, @happyTonakai).
-- **Feishu upgrades** — `mention_map` for outbound bot-to-bot `@` resolution (#1341); inter-bot relay echoes routed back into caller's thread (#1413).
-- **Russian (ru) i18n** — Web admin UI Russian locale (#1449, @sonsay).
-- **Reliability fixes** — resume stream preview after permission prompt (#1451); absolute paths from `SaveFilesToDisk` / `AppendFileRefs` (#1462); queue placeholder before session lock (#1389); codex app-server write timeout (#1448); Slack streaming-card `NO_REPLY` suppress (#1397); hide agent footer lines (#1416).
+- **New platforms** — **Tencent Yuanbao** (#1445); **cloud_web** self-hosted IM gateway (#1282); **Google Chat** (#1424); **WPS Agentspace** (#1439); **Tuitui** (#849).
+- **New agent** — **Reasonix** HTTP serve API with default/yolo/plan permission modes (#1281).
+- **Feishu** — topic workspace isolation (#1551); quoted file on-demand download (#1588); first thread mention bootstrap (#1627); cross-type image batch flush (#1693).
+- **Kimi & Pi** — native Kimi Code CLI dialect (#1564); Pi v0.84.0 toolcall_end + willRetry (#1674, #1597); Pi RPC mode (#1440).
+- **Core stability** — `/restart` panic recovery; idle close race fixes; codex gpt-5.x in `/model` (#1546); Claude Code session title fallback (#1549); Weixin send budget (#1643).
+- **`agent_session_idle_timeout_mins`** — close idle agent processes while preserving session for resume (#1338).
 
-⚠️ **Upgrade notes**: All new config options are optional with safe defaults. Existing v1.4.1 configs upgrade as-is.
+⚠️ **Upgrade notes**: No breaking changes. All new config options are optional with safe defaults. v1.4.1 configs upgrade as-is.
 
-Full themed summary with credits: `changelogs/v1.5.0-beta.1.md`.
+Full summary: `changelogs/v1.5.0.md`.
 
 
 ## 🧩 Platform feature snapshot
