@@ -253,16 +253,21 @@ func TestBuildJSONArgs_ExtraArgsNotMutated(t *testing.T) {
 
 func TestBuildJSONArgs_ReturnsFreshSlice(t *testing.T) {
 	// Two calls with the same extraArgs must not alias the same
-	// backing array — append in one call would otherwise corrupt the
-	// other's view.
+	// backing array — a subsequent append or index write to one
+	// result would otherwise corrupt the other's view. Use an
+	// index write (not append) so the in-place mutation is
+	// unambiguous to ineffassign.
 	extra := []string{"--no-color"}
 	a1 := buildJSONArgs(extra, "p1", "", "", "", nil)
 	a2 := buildJSONArgs(extra, "p2", "", "", "", nil)
 
-	a1 = append(a1, "EXTRA")
+	if len(a1) == 0 || len(a2) == 0 {
+		t.Fatal("helper returned empty slice")
+	}
+	a1[0] = "MUTATED-IN-A1"
 	for _, x := range a2 {
-		if x == "EXTRA" {
-			t.Error("a2 saw appends made to a1 — slices alias")
+		if x == "MUTATED-IN-A1" {
+			t.Error("a2 saw mutation made to a1[0] — slices alias")
 		}
 	}
 }
