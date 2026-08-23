@@ -55,6 +55,13 @@ type Agent struct {
 
 	appendSystemPrompt string // Custom text appended to the system prompt (keeps Claude's default)
 
+	// lang is the operator's configured cc-connect language (Issue #1655).
+	// When non-empty, session spawns use the localized cc-connect system
+	// prompt for the four tool sections (send / cron / timer / relay).
+	// Empty means "use English / cc-connect default" — back-compat with
+	// callers that pre-date the language option.
+	lang core.Language
+
 	providerProxy  *core.ProviderProxy // local proxy for third-party providers
 	proxyLocalURL  string              // local URL of the proxy
 	platformPrompt string              // platform-specific formatting instructions
@@ -150,6 +157,11 @@ func New(opts map[string]any) (core.Agent, error) {
 	systemPrompt, _ := opts["system_prompt"].(string)
 	appendSystemPrompt, _ := opts["append_system_prompt"].(string)
 	ccDataDir, _ := opts["cc_data_dir"].(string)
+	// Issue #1655: pass the operator's configured cc-connect language into the
+	// agent so per-spawn prompts can be localized. Empty string (legacy callers)
+	// falls back to English via AgentSystemPromptForLang.
+	langRaw, _ := opts["language"].(string)
+	lang := core.NormalizeLanguageString(langRaw)
 
 	var pluginDirs []string
 	if dir, ok := opts["plugin_dir"].(string); ok && dir != "" {
@@ -244,7 +256,12 @@ func New(opts map[string]any) (core.Agent, error) {
 	// newClaudeSession still covers content drift (cc-connect upgrades)
 	// and the empty-ccDataDir corner case. Failure here is non-fatal —
 	// the next spawn will retry and surface the error then.
-	if _, err := ensureSharedSystemPromptFile(ccDataDir, core.AgentSystemPrompt()); err != nil {
+	//
+	// Issue #1655: when the operator has set language="zh", the shared
+	// file content is the localized AgentSystemPromptForLang so the very
+	// first session (which uses the shared-file fast path) already sees
+	// the right language without waiting for the per-spawn merge.
+	if _, err := ensureSharedSystemPromptFile(ccDataDir, core.AgentSystemPromptForLang(lang)); err != nil {
 		slog.Warn("claudecode: failed to write shared system prompt file at startup; will retry on first spawn", "err", err, "cc_data_dir", ccDataDir)
 	}
 
@@ -269,6 +286,7 @@ func New(opts map[string]any) (core.Agent, error) {
 		ccDataDir:        ccDataDir,
 
 		appendSystemPrompt: appendSystemPrompt,
+		lang:               lang,
 	}, nil
 }
 
@@ -525,12 +543,16 @@ func (a *Agent) StartSession(ctx context.Context, sessionID string) (core.AgentS
 	platformPrompt := a.platformPrompt
 	systemPrompt := a.systemPrompt
 	appendSystemPrompt := a.appendSystemPrompt
+	// Issue #1655: agent-level language drives the localized cc-connect system
+	// prompt. Read under the mutex and pass through to newClaudeSession so the
+	// session picks up the right tool-prompt bundle at spawn time.
+	lang := a.lang
 	// When router_url is set, --verbose conflicts with --output-format stream-json
 	// (verbose emits non-JSON text to stdout that corrupts the JSON stream).
 	disableVerbose := a.routerURL != ""
 	a.mu.Unlock()
 
-	return newClaudeSession(ctx, workDir, a.cmd, a.cliExtraArgs, a.cmdArgsFlag, model, effort, sessionID, mode, systemPrompt, appendSystemPrompt, tools, disTools, pluginDirs, extraEnv, platformPrompt, disableVerbose, a.spawnOpts, maxTok, a.ccDataDir)
+	return newClaudeSession(ctx, workDir, a.cmd, a.cliExtraArgs, a.cmdArgsFlag, model, effort, sessionID, mode, systemPrompt, appendSystemPrompt, tools, disTools, pluginDirs, extraEnv, platformPrompt, disableVerbose, a.spawnOpts, maxTok, a.ccDataDir, lang)
 }
 
 func (a *Agent) ListSessions(ctx context.Context) ([]core.AgentSessionInfo, error) {
