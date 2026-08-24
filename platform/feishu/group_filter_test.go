@@ -118,7 +118,7 @@ func TestGroupFilterDegraded_FailsClosed(t *testing.T) {
 	// In the new logic, filterActive := botOpenID != "" || IsGroupFilterDegraded()
 	// must be true so the group filter is engaged (fail-closed) rather than
 	// skipped (fail-open).
-	if !(p.getBotOpenID() != "" || p.IsGroupFilterDegraded()) {
+	if p.getBotOpenID() == "" && !p.IsGroupFilterDegraded() {
 		t.Fatal("filterActive must be true when degraded, so the group filter runs")
 	}
 }
