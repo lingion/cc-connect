@@ -81,8 +81,12 @@ type Platform struct {
 	syncBuf     string
 	syncBufPath string
 
-	dedupMu sync.Mutex
-	dedup   map[string]time.Time
+	// dedupEnabled mirrors the optional dedup_enabled config key (default true for
+	// weixin because ilink can retransmit the same message_id on ACK delay —
+	// see issue #1667). When false, the dispatch path skips the cache entirely.
+	dedupEnabled bool
+	// dedup tracks recently seen composite keys to absorb retransmissions.
+	dedup *core.MessageDedup
 
 	pauseMu    sync.Mutex
 	pauseUntil time.Time
@@ -196,6 +200,18 @@ func New(opts map[string]any) (core.Platform, error) {
 		burstWindow = defaultBurstWindowSecs
 	}
 
+	// dedup_enabled (default true) and dedup_window_seconds (default 300s, the
+	// legacy value) — see issue #1667. ilink can retransmit the same message_id
+	// on ACK delay; without dedup the bot replies twice.
+	dedupEnabled := pickBool(opts["dedup_enabled"])
+	if _, ok := opts["dedup_enabled"]; !ok {
+		dedupEnabled = true
+	}
+	dedupWindow := pickInt(opts["dedup_window_seconds"])
+	if dedupWindow <= 0 {
+		dedupWindow = 300
+	}
+
 	p := &Platform{
 		token:           token,
 		baseURL:         baseURL,
@@ -208,7 +224,8 @@ func New(opts map[string]any) (core.Platform, error) {
 		httpClient:      httpClient,
 		cdnHttpClient:   cdnHttpClient,
 		tokens:          make(map[string]string),
-		dedup:           make(map[string]time.Time),
+		dedupEnabled:    dedupEnabled,
+		dedup:           core.NewMessageDedup(time.Duration(dedupWindow) * time.Second),
 		typingTickets:   make(map[string]typingTicketEntry),
 		sendQuotaLimit:  burstLimit,
 		sendQuotaWindow: time.Duration(burstWindow) * time.Second,
@@ -238,6 +255,26 @@ func pickInt(v any) int {
 		return int(x)
 	default:
 		return 0
+	}
+}
+
+// pickBool interprets an any value as a bool. Numeric values are treated as
+// "non-zero => true" so the same key works for both booleans and 0/1 ints.
+func pickBool(v any) bool {
+	switch x := v.(type) {
+	case bool:
+		return x
+	case int:
+		return x != 0
+	case int64:
+		return x != 0
+	case float64:
+		return x != 0
+	case string:
+		s := strings.ToLower(strings.TrimSpace(x))
+		return s == "true" || s == "1" || s == "yes" || s == "on"
+	default:
+		return false
 	}
 }
 
@@ -485,24 +522,15 @@ func (p *Platform) dispatchInbound(ctx context.Context, m *weixinMessage, h core
 		}
 	}
 
-	// Include create_time_ms and client_id so (seq,message_id)=(0,0) or duplicates are less likely to collide.
+	// Include create_time_ms and client_id so (seq,message_id)=(0,0) or duplicates
+	// are less likely to collide. Dedup window is configurable via
+	// dedup_window_seconds; the cache is a thin wrapper over core.MessageDedup
+	// (see issue #1667).
 	dedupKey := fmt.Sprintf("%s|%d|%d|%d|%s", from, m.MessageID, m.Seq, m.CreateTimeMs, strings.TrimSpace(m.ClientID))
-	p.dedupMu.Lock()
-	if p.dedup == nil {
-		p.dedup = make(map[string]time.Time)
-	}
-	now := time.Now()
-	for k, ts := range p.dedup {
-		if now.Sub(ts) > 5*time.Minute {
-			delete(p.dedup, k)
-		}
-	}
-	if _, ok := p.dedup[dedupKey]; ok {
-		p.dedupMu.Unlock()
+	if p.dedupEnabled && p.dedup != nil && p.dedup.IsDuplicate(dedupKey) {
+		slog.Debug("weixin: dropping duplicate message", "from", from, "message_id", m.MessageID, "seq", m.Seq)
 		return
 	}
-	p.dedup[dedupKey] = now
-	p.dedupMu.Unlock()
 
 	if tok := strings.TrimSpace(m.ContextToken); tok != "" {
 		p.setContextToken(from, tok)
