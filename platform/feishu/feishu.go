@@ -143,7 +143,19 @@ type Platform struct {
 	cancel           context.CancelFunc
 	dedup            *core.MessageDedup
 	botOpenID        string
-	peerBots         map[string]string // app_id -> friendly alias, for quoted-reply attribution
+	// groupFilterDegraded is true when bot open_id discovery failed at startup
+	// (e.g. transient network/DNS/proxy outage). When true, group chat mention
+	// filtering fails closed (silently drops group messages without @bot) instead
+	// of failing open (accepting every group message). DM traffic is unaffected.
+	// Issue #1618: previous behavior treated botOpenID=="" as "filter off", which
+	// silently turned the bot into a loud responder for the rest of the process
+	// lifetime when the bot-info API failed.
+	groupFilterDegraded     bool
+	groupFilterDegradedAt   time.Time
+	groupFilterDegradedErr  string
+	groupFilterRetryCancel  context.CancelFunc
+	groupFilterRetryStop    chan struct{}
+	peerBots                map[string]string // app_id -> friendly alias, for quoted-reply attribution
 	mentionMap       map[string]string // agent name -> open_id (for outbound @ resolution)
 	userNameCache    sync.Map          // open_id -> display name
 	chatNameCache    sync.Map          // chat_id -> chat name
@@ -478,8 +490,22 @@ func (p *Platform) Start(handler core.MessageHandler) error {
 	// can still receive events and operate correctly. We therefore only attempt
 	// bot open_id discovery eagerly for WebSocket mode.
 	if !p.shouldUseWebhookMode() {
-		if openID, err := p.fetchBotOpenID(); err != nil {
-			slog.Warn(p.platformName+": failed to get bot open_id, group chat filtering disabled", "error", err)
+		openID, err := p.fetchBotOpenIDWithRetry(p.bgCtxForStartup())
+		if err != nil {
+			// Issue #1618: previous code failed open here — when bot open_id
+			// discovery failed, the group mention filter read botOpenID=="" as
+			// "filter off", which made the bot reply to every group message for
+			// the rest of the process lifetime. Now we fail closed: mark the
+			// filter as degraded (group chats silently drop messages without
+			// @bot; DM traffic is unaffected), upgrade the log to ERROR, and
+			// start a background supervisor that retries every 5 minutes so
+			// transient proxy/DNS/VPN issues self-heal without a process restart.
+			p.markGroupFilterDegraded(err)
+			slog.Error(p.platformName+": failed to get bot open_id; group chat filtering is degraded (group messages without @bot will be silently dropped) — a background supervisor will keep retrying",
+				"error", err,
+				"supervision_interval", groupFilterRetryInterval,
+			)
+			p.startGroupFilterSupervisor()
 		} else {
 			p.mu.Lock()
 			p.botOpenID = openID
@@ -1383,8 +1409,16 @@ func (p *Platform) onMessage(ctx context.Context, event *larkim.P2MessageReceive
 	// thread set; sessionKey is also used downstream for dispatch.
 	sessionKey := p.makeSessionKey(msg, chatID, userID)
 
-	if chatType == "group" && !p.groupReplyAll && p.getBotOpenID() != "" {
-		if !isBotMentioned(msg.Mentions, p.getBotOpenID()) {
+	// Issue #1618: the mention filter used to gate on `botOpenID != ""`,
+	// which silently *disabled* filtering when bot discovery had failed
+	// at startup — the bot would answer every group message for the
+	// rest of the process lifetime. We now consult both flags: when
+	// the filter is degraded we fail closed (drop the message) and
+	// emit a periodic warning, instead of failing open.
+	botOpenID := p.getBotOpenID()
+	filterActive := botOpenID != "" || p.IsGroupFilterDegraded()
+	if chatType == "group" && !p.groupReplyAll && filterActive {
+		if !isBotMentioned(msg.Mentions, botOpenID) {
 			switch {
 			// Feishu @all sends {"text":"@_all"} with 0 mentions.
 			case p.respondToAtEveryoneAndHere && msg.Content != nil && strings.Contains(*msg.Content, "@_all"):
@@ -1398,7 +1432,18 @@ func (p *Platform) onMessage(ctx context.Context, event *larkim.P2MessageReceive
 				slog.Debug(p.tag()+": passing attachment through active thread without mention",
 					"chat_id", chatID, "session_key", sessionKey, "msg_type", msgType, "message_id", messageID)
 			default:
-				slog.Debug(p.tag()+": ignoring group message without bot mention", "chat_id", chatID)
+				if p.IsGroupFilterDegraded() && botOpenID == "" {
+					// Fail closed: drop the message. Use WARN (not
+					// ERROR) here per-message to avoid log floods;
+					// the supervisor already emits a periodic ERROR
+					// with the underlying cause.
+					slog.Warn(p.tag()+": group filter degraded; dropping non-mention group message (use /status to inspect)",
+						"chat_id", chatID,
+						"message_id", messageID,
+					)
+				} else {
+					slog.Debug(p.tag()+": ignoring group message without bot mention", "chat_id", chatID)
+				}
 				return nil
 			}
 		}
@@ -3857,6 +3902,200 @@ func (p *Platform) withTransientRetry(ctx context.Context, operation string, fn 
 	return fmt.Errorf("%s failed after %d retries: %w", operation, maxTransientRetries, lastErr)
 }
 
+// ── Issue #1618: fail-closed + supervised retry for bot open_id ──
+//
+// When the Feishu/Lark bot-info API call fails at startup (transient
+// proxy/VPN/DNS outage, server hiccup, etc.), the bot's open_id stays
+// unknown. The previous behaviour read this as "group mention filter
+// off", so the bot would reply to every group message for the rest of
+// the process lifetime — a 3h10m window in the user's incident where
+// the bot suddenly became a loud responder with no way for operators
+// to notice. The functions below:
+//
+//   - wrap the initial fetch in transient retry so most startup
+//     failures self-heal before we degrade,
+//   - mark the filter as "degraded" (rather than "off") when the
+//     retry budget is exhausted, with timestamp + last error captured
+//     for /status surface,
+//   - start a background supervisor that retries every
+//     groupFilterRetryInterval until success or process shutdown so
+//     transient outages self-heal without a restart,
+//   - and keep group-message handling fail-closed (drop, do not
+//     answer) while degraded.
+
+const groupFilterRetryInterval = 5 * time.Minute
+
+// bgCtxForStartup returns a fresh background context for the initial
+// bot-open_id retry burst. We deliberately do not tie it to p.cancel:
+// the cancel is only set later in startWebSocketMode / startWebhookMode,
+// and we want the retry to start even before that wiring is in place.
+func (p *Platform) bgCtxForStartup() context.Context {
+	return context.Background()
+}
+
+// fetchBotOpenIDWithRetry wraps the bot-info API call with the
+// platform's standard transient retry loop. Returns the open_id on
+// success, or the final error if every retry failed.
+func (p *Platform) fetchBotOpenIDWithRetry(ctx context.Context) (string, error) {
+	var openID string
+	err := p.withTransientRetry(ctx, "fetchBotOpenID", func() error {
+		id, err := p.fetchBotOpenID()
+		if err != nil {
+			return err
+		}
+		openID = id
+		return nil
+	})
+	return openID, err
+}
+
+// markGroupFilterDegraded records that bot open_id discovery failed
+// and the group mention filter must fail closed. Caller must hold p.mu
+// OR be the only writer to these fields; in practice Start() is the
+// sole caller at startup and the supervisor is the sole caller later.
+func (p *Platform) markGroupFilterDegraded(err error) {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	p.groupFilterDegraded = true
+	p.groupFilterDegradedAt = time.Now()
+	p.groupFilterDegradedErr = err.Error()
+}
+
+// clearGroupFilterDegraded records a successful recovery.
+func (p *Platform) clearGroupFilterDegraded() {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	p.groupFilterDegraded = false
+	p.groupFilterDegradedErr = ""
+}
+
+// groupFilterStatus is a read-only snapshot of the degraded state,
+// safe to expose to /status and the management API without holding
+// p.mu for long.
+type groupFilterStatus struct {
+	Degraded    bool      `json:"degraded"`
+	Since       time.Time `json:"since,omitempty"`
+	LastError   string    `json:"last_error,omitempty"`
+	RecoveredAt time.Time `json:"recovered_at,omitempty"`
+}
+
+// snapshotGroupFilter returns a copy of the current degraded state.
+func (p *Platform) snapshotGroupFilter() groupFilterStatus {
+	p.mu.RLock()
+	defer p.mu.RUnlock()
+	st := groupFilterStatus{Degraded: p.groupFilterDegraded}
+	if p.groupFilterDegraded {
+		st.Since = p.groupFilterDegradedAt
+		st.LastError = p.groupFilterDegradedErr
+	}
+	return st
+}
+
+// startGroupFilterSupervisor launches a background goroutine that
+// retries the bot-info API every groupFilterRetryInterval until the
+// open_id resolves (or the process stops). On success, it populates
+// p.botOpenID and clears the degraded flag so the group mention filter
+// resumes normal operation without a restart.
+func (p *Platform) startGroupFilterSupervisor() {
+	p.mu.Lock()
+	if p.groupFilterRetryStop != nil {
+		// already running; do not double-start.
+		p.mu.Unlock()
+		return
+	}
+	stop := make(chan struct{})
+	ctx, cancel := context.WithCancel(context.Background())
+	p.groupFilterRetryStop = stop
+	p.groupFilterRetryCancel = cancel
+	p.mu.Unlock()
+
+	go func() {
+		ticker := time.NewTicker(groupFilterRetryInterval)
+		defer ticker.Stop()
+		for {
+			select {
+			case <-stop:
+				return
+			case <-ctx.Done():
+				return
+			case <-ticker.C:
+				id, err := p.fetchBotOpenIDWithRetry(ctx)
+				if err != nil {
+					p.mu.RLock()
+					stale := p.groupFilterDegraded
+					p.mu.RUnlock()
+					if stale {
+						slog.Error(p.platformName+": bot open_id still unresolved; group filter remains degraded",
+							"error", err,
+							"interval", groupFilterRetryInterval,
+						)
+					}
+					continue
+				}
+				p.mu.Lock()
+				p.botOpenID = id
+				p.groupFilterDegraded = false
+				p.groupFilterDegradedErr = ""
+				p.mu.Unlock()
+				slog.Info(p.platformName+": bot open_id recovered via supervisor; group filter restored",
+					"open_id", id,
+				)
+				// We only need one successful recovery before idling;
+				// the next Stop() will tear us down. If a *future*
+				// regression invalidates botOpenID (it can't in the
+				// current model since the value is immutable), this
+				// goroutine simply keeps running and re-checking.
+				return
+			}
+		}
+	}()
+}
+
+// stopGroupFilterSupervisor signals the background supervisor to exit.
+// Safe to call even if it was never started.
+func (p *Platform) stopGroupFilterSupervisor() {
+	p.mu.Lock()
+	cancel := p.groupFilterRetryCancel
+	stop := p.groupFilterRetryStop
+	p.groupFilterRetryCancel = nil
+	p.groupFilterRetryStop = nil
+	p.mu.Unlock()
+	if cancel != nil {
+		cancel()
+	}
+	if stop != nil {
+		close(stop)
+	}
+}
+
+// PlatformHealth implements the optional core.PlatformHealth
+// interface so /status, cc-connect doctor, and the management API can
+// surface degraded state to operators. Issue #1618.
+func (p *Platform) PlatformHealth() core.PlatformHealthInfo {
+	st := p.snapshotGroupFilter()
+	info := core.PlatformHealthInfo{
+		Name:      p.Name(),
+		Connected: true,
+	}
+	if st.Degraded {
+		info.Connected = false
+		info.Degraded = true
+		info.DegradedReason = fmt.Sprintf("bot open_id unknown: %s", st.LastError)
+		info.DegradedSince = st.Since
+	}
+	return info
+}
+
+// IsGroupFilterDegraded reports whether the group mention filter is
+// currently in the fail-closed "degraded" state. Exposed for tests and
+// downstream tooling that needs the raw flag without copying the
+// PlatformHealthInfo plumbing.
+func (p *Platform) IsGroupFilterDegraded() bool {
+	p.mu.RLock()
+	defer p.mu.RUnlock()
+	return p.groupFilterDegraded
+}
+
 func stringValue(v *string) string {
 	if v == nil {
 		return ""
@@ -4830,6 +5069,11 @@ func (p *Platform) updateCardEntity(ctx context.Context, h *feishuPreviewHandle,
 }
 
 func (p *Platform) Stop() error {
+	// Issue #1618: stop the background supervisor that retries the
+	// bot-info API when startup discovery fails. Without this the
+	// goroutine could outlive the platform and leak into the next
+	// start cycle.
+	p.stopGroupFilterSupervisor()
 	if p.isWSPrimary {
 		remaining := unregisterSharedWS(p)
 		if remaining > 0 {
