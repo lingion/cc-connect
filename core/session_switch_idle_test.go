@@ -41,10 +41,10 @@ func TestSwitchSession_MarksExplicitlyActivated(t *testing.T) {
 		t.Fatalf("SwitchSession returned %s, want %s", got.ID, b.ID)
 	}
 
-	if !got.GetExplicitActivatedAt().IsZero() {
-		// Sanity: explicit activation set
-	}
 	activatedAt := got.GetExplicitActivatedAt()
+	if activatedAt.IsZero() {
+		t.Fatalf("ExplicitActivatedAt must be set after SwitchSession")
+	}
 	if activatedAt.Before(before) || activatedAt.After(after) {
 		t.Fatalf("ExplicitActivatedAt = %v, want between %v and %v", activatedAt, before, after)
 	}
