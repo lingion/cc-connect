@@ -288,7 +288,7 @@ func TestPollLoop_NotifiesReadyForPollAfterFirstSuccessfulGetUpdates(t *testing.
 		longPollMS:    100,
 		accountLabel:  "default",
 		httpClient:    &http.Client{},
-		dedup:         make(map[string]time.Time),
+		dedup:         core.NewMessageDedup(5 * time.Minute),
 		typingTickets: make(map[string]typingTicketEntry),
 	}
 	p.api = newAPIClient(srv.URL(), "tok", "", p.httpClient)
@@ -330,7 +330,7 @@ func TestPollLoop_DoesNotNotifyReadyForPollWhileGetUpdatesFails(t *testing.T) {
 		longPollMS:    100,
 		accountLabel:  "default",
 		httpClient:    &http.Client{},
-		dedup:         make(map[string]time.Time),
+		dedup:         core.NewMessageDedup(5 * time.Minute),
 		typingTickets: make(map[string]typingTicketEntry),
 	}
 	p.api = newAPIClient(srv.URL(), "tok", "", p.httpClient)

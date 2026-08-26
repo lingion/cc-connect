@@ -1484,6 +1484,18 @@ app_secret = "your-feishu-app-secret"
 # 使其低于触发阈值。设为 0 关闭配额。
 # burst_limit = 4           # max separate messages per window / 每窗口最多独立消息数
 # burst_window_secs = 86400 # window length (default 24h) / 窗口时长（秒，默认24小时）
+#
+# Inbound message dedup (issue #1667):
+# ilink can retransmit the same message_id on ACK delay or jitter, which
+# otherwise causes the bot to reply twice with different answers. The dedup
+# cache is keyed on from + message_id + seq + create_time_ms + client_id.
+# Default: enabled with a 5-minute window. Set dedup_enabled=false to disable.
+# 入站消息去重（issue #1667）：ilink 在 ACK 延迟或网络抖动时会重传相同
+# message_id，导致 bot 回复两次不同的答案。缓存键由 from + message_id + seq
+# + create_time_ms + client_id 组合。默认开启，窗口 5 分钟。设为
+# dedup_enabled=false 可关闭。
+# dedup_enabled = true
+# dedup_window_seconds = 300
 
 # -----------------------------------------------------------------------------
 # Tencent Yuanbao (yuanbao.tencent.com bot platform)
