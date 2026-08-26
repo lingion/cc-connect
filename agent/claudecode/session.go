@@ -231,11 +231,18 @@ func newClaudeSession(ctx context.Context, workDir, cliBin string, cliExtraArgs 
 	// innerArgs are Claude Code CLI flags — when a wrapper is used with
 	// cmdArgsFlag these get bundled into a single passthrough string.
 	// outerArgs are flags the wrapper itself understands (e.g. --model).
+	//
+	// We intentionally do NOT pass `--replay-user-messages`: that flag tells
+	// Claude Code to drain queued stdin messages and exit, which breaks any
+	// subsequent in-session slash command such as `/compact`, `/clear`, or
+	// `/resume` — issue #1736. Without it the CLI keeps reading stdin until
+	// either the user closes the session or `agent_session_idle_timeout_mins`
+	// (#1338) reaps the idle process; both paths are already handled by the
+	// engine and Close() below.
 	innerArgs := []string{
 		"--output-format", "stream-json",
 		"--input-format", "stream-json",
 		"--permission-prompt-tool", "stdio",
-		"--replay-user-messages",
 	}
 	if !disableVerbose {
 		innerArgs = append(innerArgs, "--verbose")
