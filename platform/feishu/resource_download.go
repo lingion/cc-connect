@@ -149,7 +149,7 @@ func (p *Platform) resourceFetchFirstChunk(ctx context.Context, token, messageID
 	if err != nil {
 		return nil, 0, fmt.Errorf("first-chunk request: %w", err)
 	}
-	defer resp.Body.Close()
+	defer func() { _, _ = io.Copy(io.Discard, resp.Body); _ = resp.Body.Close() }()
 
 	switch resp.StatusCode {
 	case http.StatusPartialContent:
@@ -262,7 +262,7 @@ func (p *Platform) resourceSingleGet(ctx context.Context, token, messageID, file
 	if err != nil {
 		return nil, fmt.Errorf("resource request: %w", err)
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
 		body, _ := io.ReadAll(io.LimitReader(resp.Body, 4*1024))
@@ -285,53 +285,6 @@ func (p *Platform) resourceSingleGet(ctx context.Context, token, messageID, file
 	slog.Debug(p.tag()+": resource downloaded (single GET)",
 		"file_key", fileKey, "type", resType, "size", len(data))
 	return data, nil
-}
-
-// resourceChunkedGet downloads a resource by issuing sequential Range
-// requests and concatenating the chunks. Caller MUST have validated
-// `total > p.resourceChunkSize` and that Range is honoured.
-//
-// On transient network errors mid-loop the failing chunk is retried with
-// the existing exponential-backoff policy (maxTransientRetries). We do not
-// retry from byte 0 because that would multiply the bandwidth cost of a
-// single flaky handoff by the chunk count.
-func (p *Platform) resourceChunkedGet(ctx context.Context, token, messageID, fileKey, resType string, total int64) ([]byte, error) {
-	if total <= p.resourceChunkSize {
-		return nil, fmt.Errorf("internal: resourceChunkedGet called with small total=%d", total)
-	}
-	if total > p.resourceMaxBytes {
-		return nil, fmt.Errorf("resource too large: total=%d exceeds cap %d", total, p.resourceMaxBytes)
-	}
-
-	buf := bytes.NewBuffer(make([]byte, 0, total))
-	chunkSize := p.resourceChunkSize
-	if chunkSize > resourceRangeMaxRangeHeaderBytes {
-		chunkSize = resourceRangeMaxRangeHeaderBytes
-	}
-	var chunks int
-	for offset := int64(0); offset < total; offset += chunkSize {
-		end := offset + chunkSize - 1
-		if end >= total {
-			end = total - 1
-		}
-		n, err := p.resourceRangeChunk(ctx, token, messageID, fileKey, resType, offset, end, total)
-		if err != nil {
-			return nil, fmt.Errorf("resource chunk offset=%d: %w", offset, err)
-		}
-		buf.Write(n)
-		chunks++
-		if err := ctx.Err(); err != nil {
-			return nil, err
-		}
-	}
-
-	if int64(buf.Len()) != total {
-		return nil, fmt.Errorf("resource size mismatch: assembled=%d expected=%d", buf.Len(), total)
-	}
-	slog.Info(p.tag()+": resource chunked download complete",
-		"file_key", fileKey, "type", resType, "total", total, "chunks", chunks,
-		"chunk_size", chunkSize)
-	return buf.Bytes(), nil
 }
 
 // resourceRangeChunk fetches a single byte range and verifies the
@@ -383,12 +336,12 @@ func (p *Platform) resourceRangeChunk(
 			cr := resp.Header.Get("Content-Range")
 			if cr != "" {
 				if got, ok := parseContentRangeTotal(cr); ok && got != expectedTotal {
-					resp.Body.Close()
+					_ = resp.Body.Close()
 					return nil, fmt.Errorf("Content-Range total mismatch: got %d want %d", got, expectedTotal)
 				}
 			}
 			body, err := io.ReadAll(io.LimitReader(resp.Body, end-start+1+1))
-			resp.Body.Close()
+			_ = resp.Body.Close()
 			if err != nil {
 				if isTransientError(err) && attempt < maxTransientRetries {
 					lastErr = err
@@ -405,7 +358,7 @@ func (p *Platform) resourceRangeChunk(
 		// Non-206 response: capture a snippet for diagnostics, then either
 		// retry (transient 5xx) or fail fast.
 		body, _ := io.ReadAll(io.LimitReader(resp.Body, 4*1024))
-		resp.Body.Close()
+		_ = resp.Body.Close()
 
 		if resp.StatusCode >= 500 && resp.StatusCode < 600 && attempt < maxTransientRetries {
 			lastErr = fmt.Errorf("range status %d body=%q", resp.StatusCode, strings.TrimSpace(string(body)))
