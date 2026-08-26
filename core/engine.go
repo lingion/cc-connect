@@ -8949,8 +8949,20 @@ func (e *Engine) renderDirCardSafe(sessionKey string, page int) *Card {
 func (e *Engine) renderStatusCard(sessionKey string, userID string) *Card {
 	agent, sessions := e.sessionContextForKey(sessionKey)
 	platNames := make([]string, len(e.platforms))
+	var degraded []string
 	for i, pl := range e.platforms {
-		platNames[i] = pl.Name()
+		name := pl.Name()
+		// Issue #1618: surface per-platform degraded state (e.g. Lark
+		// bot open_id unresolved) inline in the platform list and as
+		// a separate warnings block below.
+		if ph, ok := pl.(PlatformHealth); ok {
+			info := ph.PlatformHealth()
+			if info.Degraded {
+				name = fmt.Sprintf("%s ⚠️", name)
+				degraded = append(degraded, fmt.Sprintf("• %s: %s", info.Name, info.DegradedReason))
+			}
+		}
+		platNames[i] = name
 	}
 	platformStr := strings.Join(platNames, ", ")
 	if len(platNames) == 0 {
@@ -9035,6 +9047,12 @@ func (e *Engine) renderStatusCard(sessionKey string, userID string) *Card {
 		userIDStr,
 	)
 	title, body := splitCardTitleBody(statusText)
+
+	if len(degraded) > 0 {
+		// Issue #1618: surface per-platform degraded reasons so operators
+		// see them in /status (previously hidden behind a silent fail-open).
+		body += "\n\n**⚠️ Degraded**\n" + strings.Join(degraded, "\n")
+	}
 
 	return NewCard().
 		Title(title, "green").
