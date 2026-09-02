@@ -1034,11 +1034,10 @@ func TestGetSessionHistory_TimestampsAreLocal(t *testing.T) {
 	setZoneLocation(loc)
 	defer restoreZoneLocation(prevLoc, hadPrev)
 
-	// Save and restore HOME so the test can drive os.UserHomeDir().
-	prevHome := os.Getenv("HOME")
+	// t.Setenv saves the original value and restores it via t.Cleanup,
+	// so we don't need a manual restore (which would need errcheck handling).
 	homeDir := t.TempDir()
 	t.Setenv("HOME", homeDir)
-	defer os.Setenv("HOME", prevHome)
 
 	workDir := t.TempDir()
 	projectsBase := filepath.Join(homeDir, ".claude", "projects")
